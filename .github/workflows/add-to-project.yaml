@@ -1,0 +1,17 @@
+name: Add to project
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+jobs:
+  add-to-project:
+    runs-on: ubuntu-latest
+    steps:
+      # https://github.com/actions/add-to-project/releases/tag/v1.0.2
+      - uses: actions/add-to-project@244f685bbc3b7adfa8466e08b698b5577571133e
+        with:
+          project-url: https://github.com/orgs/nebari-dev/projects/12
+          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
