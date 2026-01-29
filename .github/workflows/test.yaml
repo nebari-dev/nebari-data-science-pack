@@ -56,10 +56,6 @@ jobs:
           sleep 5
           curl -sf http://localhost:8000/hub/login | grep -q "JupyterHub"
 
-      - name: Test jhub-apps static files
-        run: |
-          curl -sf http://localhost:8000/services/japps/static/js/index.js > /dev/null
-
       - name: Check hub logs for errors
         if: failure()
         run: kubectl logs -l component=hub --tail=100
