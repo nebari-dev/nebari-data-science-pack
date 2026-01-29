@@ -53,8 +53,12 @@ jobs:
       - name: Test JupyterHub endpoint
         run: |
           kubectl port-forward svc/proxy-public 8000:80 &
+          PF_PID=$!
           sleep 5
           curl -sf http://localhost:8000/hub/login | grep -q "JupyterHub"
+          RESULT=$?
+          kill $PF_PID 2>/dev/null || true
+          exit $RESULT
 
       - name: Check hub logs for errors
         if: failure()
