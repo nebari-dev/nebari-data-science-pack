@@ -29,26 +29,26 @@ jobs:
         run: helm dependency update
 
       - name: Deploy chart
-        run: |
-          helm install nebari . \
-            --namespace default \
-            --wait \
-            --timeout 10m
+        run: helm install data-science-pack . --namespace default
 
-      - name: Wait for hub pod
+      - name: Wait for pods with progress
         run: |
-          kubectl wait --for=condition=ready pod \
-            -l component=hub \
-            --timeout=300s
-
-      - name: Wait for proxy pod
-        run: |
-          kubectl wait --for=condition=ready pod \
-            -l component=proxy \
-            --timeout=300s
-
-      - name: Verify pods running
-        run: kubectl get pods
+          for i in {1..60}; do
+            echo "=== Attempt $i/60 ==="
+            kubectl get pods
+            echo "--- Hub logs (last 10 lines) ---"
+            kubectl logs -l component=hub --tail=10 2>/dev/null || echo "(not ready)"
+            echo "--- Proxy logs (last 5 lines) ---"
+            kubectl logs -l component=proxy --tail=5 2>/dev/null || echo "(not ready)"
+            if kubectl wait --for=condition=ready pod -l component=hub --timeout=5s 2>/dev/null && \
+               kubectl wait --for=condition=ready pod -l component=proxy --timeout=5s 2>/dev/null; then
+              echo "All pods ready!"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Timeout waiting for pods"
+          exit 1
 
       - name: Test JupyterHub endpoint
         run: |

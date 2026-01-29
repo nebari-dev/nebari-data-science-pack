@@ -11,7 +11,6 @@ A Helm chart for deploying JupyterHub with [jhub-apps](https://github.com/nebari
 - JupyterHub with Nebari's custom images
 - jhub-apps integration for deploying data science applications
 - Dummy authenticator for local development (OAuth/Keycloak configurable for production)
-- Optional shared storage (RWX PVC)
 
 ## Quick Start
 
@@ -20,7 +19,7 @@ A Helm chart for deploying JupyterHub with [jhub-apps](https://github.com/nebari
 ```bash
 helm repo add nebari https://nebari-dev.github.io/nebari-data-science-pack
 helm repo update
-helm install nebari nebari/nebari-data-science-pack
+helm install data-science-pack nebari/nebari-data-science-pack
 ```
 
 ### Install from Source
@@ -29,7 +28,7 @@ helm install nebari nebari/nebari-data-science-pack
 git clone https://github.com/nebari-dev/nebari-data-science-pack.git
 cd nebari-data-science-pack
 helm dependency update
-helm install nebari . --namespace default
+helm install data-science-pack . --namespace default
 ```
 
 ### Access JupyterHub

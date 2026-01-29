@@ -23,7 +23,7 @@ allow_k8s_contexts('k3d-nebari-dev')
 # Note: helm() skips chart hooks (like image-puller), which is fine for local dev
 k8s_yaml(helm(
     '.',
-    name='nebari',
+    name='data-science-pack',
     namespace='default',
 ))
 
