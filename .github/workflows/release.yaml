@@ -86,6 +86,8 @@ jobs:
         run: |
           cp *.tgz gh-pages/
           cd gh-pages
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
           helm repo index . --url https://github.com/${{ github.repository }}/releases/download/${{ steps.chart.outputs.name }}-${{ steps.chart.outputs.version }}
           git add .
           git commit -m "Release ${{ steps.chart.outputs.name }}-${{ steps.chart.outputs.version }}"
