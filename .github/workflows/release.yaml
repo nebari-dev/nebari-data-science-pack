@@ -3,12 +3,15 @@ name: Release Chart
 on:
   push:
     branches: [main]
+    paths:
+      - 'Chart.yaml'
 
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pages: write
 
     steps:
       - name: Checkout
@@ -24,12 +27,66 @@ jobs:
       - name: Install Helm
         run: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
+      - name: Get chart version
+        id: chart
+        run: |
+          echo "version=$(grep '^version:' Chart.yaml | awk '{print $2}')" >> $GITHUB_OUTPUT
+          echo "name=$(grep '^name:' Chart.yaml | awk '{print $2}')" >> $GITHUB_OUTPUT
+
+      - name: Check if release exists
+        id: check
+        run: |
+          if gh release view "${{ steps.chart.outputs.name }}-${{ steps.chart.outputs.version }}" &>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Update Helm dependencies
+        if: steps.check.outputs.exists == 'false'
         run: helm dependency update
 
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@cae68fefc6b5f367a0275617c9f83181ba54714f  # v1.7.0
-        with:
-          skip_existing: true
+      - name: Package chart
+        if: steps.check.outputs.exists == 'false'
+        run: helm package .
+
+      - name: Create GitHub release
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          gh release create "${{ steps.chart.outputs.name }}-${{ steps.chart.outputs.version }}" \
+            --title "${{ steps.chart.outputs.name }}-${{ steps.chart.outputs.version }}" \
+            --generate-notes \
+            *.tgz
         env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout gh-pages
+        if: steps.check.outputs.exists == 'false'
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
+        with:
+          ref: gh-pages
+          path: gh-pages
+        continue-on-error: true
+
+      - name: Setup gh-pages branch
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          if [ ! -d gh-pages ]; then
+            mkdir gh-pages
+            cd gh-pages
+            git init
+            git checkout -b gh-pages
+            git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+          fi
+
+      - name: Update Helm repo index
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          cp *.tgz gh-pages/
+          cd gh-pages
+          helm repo index . --url https://github.com/${{ github.repository }}/releases/download/${{ steps.chart.outputs.name }}-${{ steps.chart.outputs.version }}
+          git add .
+          git commit -m "Release ${{ steps.chart.outputs.name }}-${{ steps.chart.outputs.version }}"
+          git push origin gh-pages --force
