@@ -1,0 +1,23 @@
+# ctlptl cluster configuration for local development
+# Reference: https://github.com/tilt-dev/ctlptl/blob/main/README.md
+# API: https://pkg.go.dev/github.com/tilt-dev/ctlptl/pkg/api#Cluster
+
+# Registry for local image storage
+# Using a fixed port (5005) for predictable registry URL
+# Labels required for k3d to recognize the registry
+# Reference: https://github.com/tilt-dev/ctlptl/blob/main/examples/k3d-registry.yaml
+apiVersion: ctlptl.dev/v1alpha1
+kind: Registry
+name: nebari-registry
+port: 5005
+labels:
+  app: k3d
+  k3d.role: registry
+---
+# k3d cluster with registry attached
+# Reference: https://github.com/tilt-dev/ctlptl/blob/main/examples/k3d.yaml
+apiVersion: ctlptl.dev/v1alpha1
+kind: Cluster
+product: k3d
+name: k3d-nebari-dev
+registry: nebari-registry

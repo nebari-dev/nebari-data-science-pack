@@ -1,0 +1,32 @@
+# Default values for nebari-data-science-pack
+# This is a YAML-formatted file.
+
+# JupyterHub configuration
+# All values under this key are passed to the jupyterhub subchart
+jupyterhub:
+  hub:
+    config:
+      JupyterHub:
+        admin_access: true
+        authenticator_class: dummy
+
+  singleuser:
+    image:
+      name: quay.io/jupyter/datascience-notebook
+      tag: "2024-12-02"
+    defaultUrl: "/lab"
+    extraEnv:
+      JUPYTERHUB_SINGLEUSER_APP: "jupyter_server.serverapp.ServerApp"
+
+  proxy:
+    service:
+      type: ClusterIP
+
+  scheduling:
+    userScheduler:
+      enabled: false
+
+  cull:
+    enabled: true
+    timeout: 3600
+    every: 300

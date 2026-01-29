@@ -1,0 +1,23 @@
+# Tilt ignore file
+# Reference: https://docs.tilt.dev/file_changes.html
+
+# Helm chart dependencies (downloaded charts)
+charts/
+
+# Git
+.git/
+
+# IDE
+.idea/
+.vscode/
+
+# Claude Code
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# OS
+.DS_Store

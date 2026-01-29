@@ -1,0 +1,11 @@
+apiVersion: v2
+name: nebari-data-science-pack
+description: A Helm chart for deploying JupyterHub with data science tools on Kubernetes
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: jupyterhub
+    version: 4.3.2
+    repository: https://hub.jupyter.org/helm-chart/
