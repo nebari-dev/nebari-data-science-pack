@@ -8,9 +8,10 @@
 # - tilt up starts the dev loop with UI at http://localhost:10350
 up:
 	ctlptl apply -f ctlptl-config.yaml
-	tilt up
+	@pgrep -f "tilt up" >/dev/null && echo "Tilt already running at http://localhost:10350" || tilt up
 
 # Tear down local development environment
 down:
-	tilt down
+	-tilt down
+	-pkill -f "tilt up" 2>/dev/null || true
 	ctlptl delete -f ctlptl-config.yaml
