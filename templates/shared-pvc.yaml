@@ -1,0 +1,17 @@
+{{- if .Values.sharedStorage.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shared-storage
+  labels:
+    {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.sharedStorage.accessModes | nindent 4 }}
+  {{- if .Values.sharedStorage.storageClass }}
+  storageClassName: {{ .Values.sharedStorage.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.sharedStorage.size }}
+{{- end }}

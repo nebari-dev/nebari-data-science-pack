@@ -1,26 +1,110 @@
 # Default values for nebari-data-science-pack
 # This is a YAML-formatted file.
 
+# Shared storage configuration (disabled - requires RWX storage class)
+sharedStorage:
+  enabled: false
+  storageClass: ""  # Leave empty to use cluster default
+  size: 10Gi
+  accessModes:
+    - ReadWriteMany
+
 # JupyterHub configuration
 # All values under this key are passed to the jupyterhub subchart
 jupyterhub:
   hub:
+    # Custom Nebari hub image with jhub-apps pre-installed
+    image:
+      name: quay.io/nebari/nebari-jupyterhub
+      tag: "main-f7e7d07-20251209"
+
     config:
       JupyterHub:
         admin_access: true
+        # Default authenticator for local development - any username/password works
+        # For production, use GenericOAuthenticator with Keycloak (see below)
         authenticator_class: dummy
+
+      # ============================================================
+      # Optional: Keycloak/OAuth Configuration
+      # ============================================================
+      # To enable OAuth authentication with Keycloak or another IdP,
+      # uncomment and configure the following section:
+      #
+      # JupyterHub:
+      #   authenticator_class: generic-oauth
+      #
+      # GenericOAuthenticator:
+      #   client_id: jupyterhub
+      #   client_secret: <your-client-secret>
+      #   oauth_callback_url: https://<your-domain>/hub/oauth_callback
+      #   authorize_url: https://<keycloak-host>/realms/<realm>/protocol/openid-connect/auth
+      #   token_url: https://<keycloak-host>/realms/<realm>/protocol/openid-connect/token
+      #   userdata_url: https://<keycloak-host>/realms/<realm>/protocol/openid-connect/userinfo
+      #   login_service: "Keycloak"
+      #   username_claim: "preferred_username"
+      #   scope:
+      #     - openid
+      #     - profile
+      #     - email
+      # ============================================================
+
+    # jhub-apps and spawner configuration
+    extraConfig:
+      01-fix-volumes: |
+        # Fix for kubespawner compatibility - convert dict to list
+        c.KubeSpawner.volumes = []
+        c.KubeSpawner.volume_mounts = []
+      02-jhub-apps: |
+        from kubespawner import KubeSpawner
+        from jhub_apps import theme_template_paths, themes
+        from jhub_apps.configuration import install_jhub_apps
+
+        # Configure jhub-apps
+        c.JupyterHub.bind_url = "http://0.0.0.0:8000"
+        c.JupyterHub.default_url = "/hub/home"
+        c.JupyterHub.template_paths = theme_template_paths
+        c.JupyterHub.template_vars = themes.DEFAULT_THEME
+        c.JAppsConfig.jupyterhub_config_path = "/usr/local/etc/jupyterhub/jupyterhub_config.py"
+        c.JAppsConfig.hub_host = "hub"
+        c.JAppsConfig.service_workers = 4
+
+        # Install jhub-apps (this sets up the service, roles, etc.)
+        c = install_jhub_apps(c, spawner_to_subclass=KubeSpawner)
+
+    service:
+      extraPorts:
+        - port: 10202
+          targetPort: 10202
+          name: jhub-apps
+
+    networkPolicy:
+      enabled: true
+      ingress:
+        - ports:
+            - port: 10202  # jhub-apps service port
 
   singleuser:
     image:
-      name: quay.io/jupyter/datascience-notebook
-      tag: "2024-12-02"
+      name: quay.io/nebari/nebari-jupyterlab
+      tag: "main-f7e7d07-20251209"
     defaultUrl: "/lab"
     extraEnv:
       JUPYTERHUB_SINGLEUSER_APP: "jupyter_server.serverapp.ServerApp"
 
+    # Storage configuration - use "none" to avoid dict format incompatibility with Nebari hub image
+    storage:
+      type: none
+
   proxy:
     service:
       type: ClusterIP
+    chp:
+      networkPolicy:
+        egress:
+          - ports:
+              - port: 10202
+                protocol: TCP
 
   scheduling:
     userScheduler:
