@@ -89,6 +89,18 @@ See `values.yaml` for all configuration options. The chart wraps the [JupyterHub
 | `test.yaml` | push/PR | Full deployment test on k3d |
 | `release.yaml` | push to main | Publish chart to GitHub Pages |
 
+## Releasing
+
+To release a new version:
+
+1. Update `version` in `Chart.yaml`
+2. Push to `main`
+3. The release workflow automatically:
+   - Creates a GitHub release tagged with the chart version
+   - Publishes the chart to GitHub Pages
+
+**Note:** Enable GitHub Pages on the `gh-pages` branch in repo settings after the first release.
+
 ## License
 
 Apache License 2.0 - see [LICENSE](LICENSE) for details.
