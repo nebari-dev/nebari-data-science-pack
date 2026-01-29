@@ -1,0 +1,65 @@
+name: Test Deployment
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
+
+      - name: Install k3d
+        run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+      - name: Create k3d cluster
+        run: k3d cluster create test --wait
+
+      - name: Install Helm
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Update Helm dependencies
+        run: helm dependency update
+
+      - name: Deploy chart
+        run: |
+          helm install nebari . \
+            --namespace default \
+            --wait \
+            --timeout 10m
+
+      - name: Wait for hub pod
+        run: |
+          kubectl wait --for=condition=ready pod \
+            -l component=hub \
+            --timeout=300s
+
+      - name: Wait for proxy pod
+        run: |
+          kubectl wait --for=condition=ready pod \
+            -l component=proxy \
+            --timeout=300s
+
+      - name: Verify pods running
+        run: kubectl get pods
+
+      - name: Test JupyterHub endpoint
+        run: |
+          kubectl port-forward svc/proxy-public 8000:80 &
+          sleep 5
+          curl -sf http://localhost:8000/hub/login | grep -q "JupyterHub"
+
+      - name: Test jhub-apps static files
+        run: |
+          curl -sf http://localhost:8000/services/japps/static/js/index.js > /dev/null
+
+      - name: Check hub logs for errors
+        if: failure()
+        run: kubectl logs -l component=hub --tail=100
