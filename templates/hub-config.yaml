@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-hub-config
+  labels:
+    {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+data:
+  01-spawner.py: |
+{{ .Files.Get "config/jupyterhub/01-spawner.py" | indent 4 }}
+  02-jhub-apps.py: |
+{{ .Files.Get "config/jupyterhub/02-jhub-apps.py" | indent 4 }}
