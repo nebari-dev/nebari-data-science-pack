@@ -62,32 +62,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Checkout gh-pages
-        if: steps.check.outputs.exists == 'false'
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
-        with:
-          ref: gh-pages
-          path: gh-pages
-        continue-on-error: true
-
-      - name: Setup gh-pages branch
-        if: steps.check.outputs.exists == 'false'
-        run: |
-          if [ ! -d gh-pages ]; then
-            mkdir gh-pages
-            cd gh-pages
-            git init
-            git checkout -b gh-pages
-            git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
-          fi
-
       - name: Update Helm repo index
         if: steps.check.outputs.exists == 'false'
         run: |
+          mkdir -p gh-pages
           cp *.tgz gh-pages/
           cd gh-pages
+          git init
+          git checkout -b gh-pages
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+          git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
           helm repo index . --url https://github.com/${{ github.repository }}/releases/download/${{ steps.chart.outputs.name }}-${{ steps.chart.outputs.version }}
           git add .
           git commit -m "Release ${{ steps.chart.outputs.name }}-${{ steps.chart.outputs.version }}"
