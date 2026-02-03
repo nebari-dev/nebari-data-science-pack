@@ -5,6 +5,12 @@ platforms = ["linux-64", "linux-aarch64"]
 
 [dependencies]
 python = "3.10.*"
+
+# system tools (moved from apt-get)
+git = "*"
+curl = "*"
+wget = "*"
+
 jupyterhub = "==5.1.0"
 jupyterhub-kubespawner = "==6.2.0"
 oauthenticator = "==16.3.0"

@@ -55,16 +55,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
     locales \
     libnss-wrapper \
-    htop \
-    tree \
-    zip \
-    unzip \
-    openssh-client \
-    tmux \
-    xvfb \
-    nano \
-    vim \
-    emacs
+    xvfb
 
 
 # ========== jupyterlab install ===========
@@ -82,8 +73,6 @@ ENV PATH=${GPU:+/usr/local/nvidia/bin:}${PATH}
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-    zsh \
-    neovim \
     libgl1 \
     libglx-mesa0 \
     libxrandr2 \
@@ -95,10 +84,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libxtst6 \
     libfontconfig1 \
     libxrender1 \
-    libosmesa6 \
-    gnupg \
-    pinentry-curses \
-    git-lfs
+    libosmesa6
 
 COPY --from=builder /root/.pixi /root/.pixi
 COPY jupyterlab/pixi.toml /opt/jupyterlab/pixi.toml

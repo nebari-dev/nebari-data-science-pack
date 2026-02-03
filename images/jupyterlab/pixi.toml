@@ -54,6 +54,19 @@ isort = "*"
 importnb = "*"
 git-lfs = "*"
 
+# system tools (moved from apt-get)
+htop = "*"
+tree = "*"
+zip = "*"
+unzip = "*"
+openssh = "*"
+tmux = "*"
+nano = "*"
+vim = "*"
+zsh = "*"
+neovim = "*"
+gnupg = "*"
+
 # jhub-apps requires pyjwt<2.10.0. We need to specify this here because otherwise a newer
 # version might be installed that is incompatible with jhub-apps.
 pyjwt = "<2.10.0"
