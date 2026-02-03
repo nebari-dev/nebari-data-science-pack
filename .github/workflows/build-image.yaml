@@ -88,7 +88,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: digests-${{ inputs.image }}-linux-amd64
+          name: ${{ inputs.image }}-digest-linux-amd64
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
@@ -139,7 +139,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: digests-${{ inputs.image }}-linux-arm64
+          name: ${{ inputs.image }}-digest-linux-arm64
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
@@ -153,7 +153,7 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: /tmp/digests
-          pattern: digests-${{ inputs.image }}-*
+          pattern: ${{ inputs.image }}-digest-*
           merge-multiple: true
 
       - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
