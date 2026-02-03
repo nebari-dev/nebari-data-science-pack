@@ -117,8 +117,10 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           push: ${{ github.event_name != 'pull_request' }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.dockerfile }}-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.dockerfile }}-${{ matrix.arch }}
+          # Use registry cache (faster than GHA cache for large images)
+          # Only export cache on non-PR builds to speed up PR checks
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/nebari-data-science-pack-${{ matrix.dockerfile }}${{ env.IMAGE_SUFFIX }}:cache-${{ matrix.arch }}
+          cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref=ghcr.io/{0}/nebari-data-science-pack-{1}{2}:cache-{3},mode=max', github.repository_owner, matrix.dockerfile, env.IMAGE_SUFFIX, matrix.arch) || '' }}
           build-args: |
             BASE_IMAGE=${{ env.BASE_IMAGE }}
             GPU=${{ env.GPU }}
