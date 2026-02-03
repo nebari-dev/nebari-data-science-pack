@@ -39,7 +39,6 @@ concurrency:
 jobs:
   build-images:
     name: "Build Docker Images"
-    runs-on: ubuntu-latest
     strategy:
       matrix:
         dockerfile:
@@ -48,10 +47,22 @@ jobs:
         platform:
           - gpu
           - cpu
+        arch:
+          - amd64
+          - arm64
         exclude:
           # JupyterHub doesn't need GPU
           - dockerfile: jupyterhub
             platform: gpu
+          # GPU images only for amd64
+          - platform: gpu
+            arch: arm64
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: "Checkout Repository"
@@ -106,9 +117,9 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           push: ${{ github.event_name != 'pull_request' }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.dockerfile }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.dockerfile }}-${{ matrix.arch }}
           build-args: |
             BASE_IMAGE=${{ env.BASE_IMAGE }}
             GPU=${{ env.GPU }}
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/${{ matrix.arch }}
