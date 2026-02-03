@@ -9,19 +9,11 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
 
     steps:
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          docker system prune -af
-
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2  # v3.10.0
 
       - name: Install k3d
         run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
@@ -36,33 +28,8 @@ jobs:
       - name: Update Helm dependencies
         run: helm dependency update
 
-      - name: Build images locally
-        run: |
-          docker buildx build \
-            --target jupyterhub \
-            --cache-from type=gha,scope=jupyterhub \
-            --cache-to type=gha,scope=jupyterhub,mode=max \
-            --load \
-            -t nebari-jupyterhub:test \
-            ./images
-          docker buildx build \
-            --target jupyterlab \
-            --cache-from type=gha,scope=jupyterlab \
-            --cache-to type=gha,scope=jupyterlab,mode=max \
-            --load \
-            -t nebari-jupyterlab:test \
-            ./images
-
-      - name: Import images to k3d
-        run: k3d image import nebari-jupyterhub:test nebari-jupyterlab:test -c test
-
       - name: Deploy chart
-        run: |
-          helm install data-science-pack . --namespace default \
-            --set jupyterhub.hub.image.name=nebari-jupyterhub \
-            --set jupyterhub.hub.image.tag=test \
-            --set jupyterhub.singleuser.image.name=nebari-jupyterlab \
-            --set jupyterhub.singleuser.image.tag=test
+        run: helm install data-science-pack . --namespace default
 
       - name: Wait for pods with progress
         run: |
@@ -88,7 +55,11 @@ jobs:
           kubectl port-forward svc/proxy-public 8000:80 &
           PF_PID=$!
           sleep 5
-          curl -sf http://localhost:8000/hub/login | grep -q "JupyterHub"
+          echo "=== Response from /hub/login ==="
+          curl -sS http://localhost:8000/hub/login || true
+          echo ""
+          echo "=== Checking for JupyterHub ==="
+          curl -sS http://localhost:8000/hub/login | grep -q "JupyterHub"
           RESULT=$?
           kill $PF_PID 2>/dev/null || true
           exit $RESULT
