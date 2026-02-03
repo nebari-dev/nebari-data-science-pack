@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+set -x
+
+# install code-server extension
+sh /opt/scripts/install-code-server.sh "/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share"
+
+fix-permissions "/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}"

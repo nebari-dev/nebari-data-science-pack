@@ -1,0 +1,110 @@
+# Build and push images to:
+# GitHub Container Registry (ghcr.io)
+# Red Hat Container Registry (quay.io)
+name: "Build Docker Images"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "*"
+    paths:
+      - "images/**"
+      - ".github/workflows/build-images.yaml"
+    tags:
+      - "*"
+
+env:
+  DOCKER_ORG: nebari
+  GPU_BASE_IMAGE: nvidia/cuda:12.8.1-base-ubuntu24.04
+  GPU_IMAGE_SUFFIX: gpu
+  BASE_IMAGE: ubuntu:24.04
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  security-events: write
+
+# https://docs.github.com/en/actions/using-jobs/using-concurrency
+concurrency:
+  # only cancel in-progress jobs or runs for the current workflow - matches against branch & tags
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-images:
+    name: "Build Docker Images"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dockerfile:
+          - jupyterlab
+          - jupyterhub
+        platform:
+          - gpu
+          - cpu
+        exclude:
+          # JupyterHub doesn't need GPU
+          - dockerfile: jupyterhub
+            platform: gpu
+
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@v3
+
+      - name: "Set up Docker Buildx"
+        uses: docker/setup-buildx-action@v2
+
+      - name: "Login to GitHub Container Registry"
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Login to Quay Container Registry"
+        uses: docker/login-action@v2
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: "Set BASE_IMAGE and Image Suffix"
+        if: ${{ matrix.platform == 'gpu' }}
+        run: |
+          echo "GPU Platform Matrix"
+          echo "BASE_IMAGE=$GPU_BASE_IMAGE" >> $GITHUB_ENV
+          echo "IMAGE_SUFFIX=-$GPU_IMAGE_SUFFIX" >> $GITHUB_ENV
+          echo "GPU=true" >> $GITHUB_ENV
+
+      - name: "Generate Docker images tags"
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: |
+            "quay.io/${{ env.DOCKER_ORG }}/nebari-${{ matrix.dockerfile }}${{ env.IMAGE_SUFFIX }}"
+            "ghcr.io/${{ github.repository_owner }}/nebari-${{ matrix.dockerfile }}${{ env.IMAGE_SUFFIX }}"
+          tags: |
+            # branch event -> e.g. `main-f0f6994-20221001`
+            type=ref, event=branch, suffix=-{{sha}}-{{date 'YYYYMMDD'}}
+            # needed for integration tests
+            type=ref, event=branch
+            # on tag push -> e.g. `2022.10.1`
+            type=ref, event=tag
+
+      - name: "Build docker images"
+        uses: docker/build-push-action@v3
+        with:
+          context: ./images
+          file: "images/Dockerfile"
+          target: ${{ matrix.dockerfile }}
+          tags: ${{ steps.meta.outputs.tags }}
+          push: ${{ github.event_name != 'pull_request' }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE }}
+            GPU=${{ env.GPU }}
+          platforms: linux/amd64,linux/arm64
