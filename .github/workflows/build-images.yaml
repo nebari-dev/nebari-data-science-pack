@@ -1,0 +1,127 @@
+# Build and push images to:
+# GitHub Container Registry (ghcr.io)
+# Red Hat Container Registry (quay.io)
+name: "Build Docker Images"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "images/**"
+      - ".github/workflows/build-images.yaml"
+    tags:
+      - "*"
+  pull_request:
+    paths:
+      - "images/**"
+      - ".github/workflows/build-images.yaml"
+
+env:
+  DOCKER_ORG: nebari
+  GPU_BASE_IMAGE: nvidia/cuda:12.8.1-base-ubuntu24.04
+  GPU_IMAGE_SUFFIX: gpu
+  BASE_IMAGE: ubuntu:24.04
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  security-events: write
+
+# https://docs.github.com/en/actions/using-jobs/using-concurrency
+concurrency:
+  # only cancel in-progress jobs or runs for the current workflow - matches against branch & tags
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-images:
+    name: "Build Docker Images"
+    strategy:
+      matrix:
+        dockerfile:
+          - jupyterlab
+          - jupyterhub
+        platform:
+          - gpu
+          - cpu
+        arch:
+          - amd64
+          - arm64
+        exclude:
+          # JupyterHub doesn't need GPU
+          - dockerfile: jupyterhub
+            platform: gpu
+          # GPU images only for amd64
+          - platform: gpu
+            arch: arm64
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@v3
+
+      - name: "Set up Docker Buildx"
+        uses: docker/setup-buildx-action@v2
+
+      - name: "Login to GitHub Container Registry"
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Login to Quay Container Registry"
+        uses: docker/login-action@v2
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: "Set BASE_IMAGE and Image Suffix"
+        if: ${{ matrix.platform == 'gpu' }}
+        run: |
+          echo "GPU Platform Matrix"
+          echo "BASE_IMAGE=$GPU_BASE_IMAGE" >> $GITHUB_ENV
+          echo "IMAGE_SUFFIX=-$GPU_IMAGE_SUFFIX" >> $GITHUB_ENV
+          echo "GPU=true" >> $GITHUB_ENV
+
+      - name: "Generate Docker images tags"
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: |
+            "quay.io/${{ env.DOCKER_ORG }}/nebari-data-science-pack-${{ matrix.dockerfile }}${{ env.IMAGE_SUFFIX }}"
+            "ghcr.io/${{ github.repository_owner }}/nebari-data-science-pack-${{ matrix.dockerfile }}${{ env.IMAGE_SUFFIX }}"
+          tags: |
+            # branch event -> e.g. `main-f0f6994-20221001`
+            type=ref, event=branch, suffix=-{{sha}}-{{date 'YYYYMMDD'}}
+            # needed for integration tests
+            type=ref, event=branch
+            # on tag push -> e.g. `2022.10.1`
+            type=ref, event=tag
+
+      - name: "Build docker images"
+        uses: docker/build-push-action@v3
+        with:
+          context: ./images
+          file: "images/Dockerfile"
+          target: ${{ matrix.dockerfile }}
+          tags: ${{ steps.meta.outputs.tags }}
+          push: ${{ github.event_name != 'pull_request' }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Use registry cache (faster than GHA cache for large images)
+          # Only export cache on non-PR builds to speed up PR checks
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/nebari-data-science-pack-${{ matrix.dockerfile }}${{ env.IMAGE_SUFFIX }}:cache-${{ matrix.arch }}
+          cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref=ghcr.io/{0}/nebari-data-science-pack-{1}{2}:cache-{3},mode=max', github.repository_owner, matrix.dockerfile, env.IMAGE_SUFFIX, matrix.arch) || '' }}
+          build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE }}
+            GPU=${{ env.GPU }}
+          platforms: linux/${{ matrix.arch }}
