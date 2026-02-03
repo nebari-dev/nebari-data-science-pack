@@ -3,7 +3,6 @@
 # - Red Hat Container Registry (quay.io)
 #
 # Uses native runners for each architecture (no QEMU emulation) for faster builds.
-# Builds push by digest, then merge job creates multi-arch manifest.
 # Reference: https://docs.docker.com/build/ci/github-actions/multi-platform/
 name: "Build Docker Images"
 
@@ -14,199 +13,50 @@ on:
       - main
     paths:
       - "images/**"
+      - ".github/workflows/build-image.yaml"
       - ".github/workflows/build-images.yaml"
     tags:
       - "*"
   pull_request:
     paths:
       - "images/**"
+      - ".github/workflows/build-image.yaml"
       - ".github/workflows/build-images.yaml"
-
-env:
-  DOCKER_ORG: nebari
-  GPU_BASE_IMAGE: nvidia/cuda:12.8.1-base-ubuntu24.04
-  BASE_IMAGE: ubuntu:24.04
-
-permissions:
-  contents: read
-  packages: write
-  id-token: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: "Build ${{ matrix.image }}${{ matrix.gpu && '-gpu' || '' }} (${{ matrix.platform }})"
-    strategy:
-      fail-fast: false
-      matrix:
-        image:
-          - jupyterlab
-          - jupyterhub
-        platform:
-          - linux/amd64
-          - linux/arm64
-        gpu:
-          - false
-        include:
-          # GPU variant only for jupyterlab on amd64
-          - image: jupyterlab
-            platform: linux/amd64
-            gpu: true
-        exclude:
-          # JupyterHub doesn't need arm64 GPU (and GPU is only amd64 anyway)
-          - image: jupyterhub
-            platform: linux/arm64
-            gpu: true
+  jupyterlab:
+    name: "jupyterlab"
+    uses: ./.github/workflows/build-image.yaml
+    with:
+      image: nebari-data-science-pack-jupyterlab
+      target: jupyterlab
+    secrets:
+      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+      QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
 
-    runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-latest' || 'ubuntu-24.04-arm' }}
+  jupyterlab-gpu:
+    name: "jupyterlab-gpu"
+    uses: ./.github/workflows/build-image.yaml
+    with:
+      image: nebari-data-science-pack-jupyterlab-gpu
+      target: jupyterlab
+      build_arm64: false  # GPU images only for amd64 (NVIDIA servers)
+      base_image: "nvidia/cuda:12.8.1-base-ubuntu24.04"
+      gpu: true
+    secrets:
+      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+      QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
 
-    steps:
-      - name: "Prepare environment"
-        id: prepare
-        run: |
-          platform=${{ matrix.platform }}
-          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
-          if [[ "${{ matrix.gpu }}" == "true" ]]; then
-            echo "IMAGE_SUFFIX=-gpu" >> $GITHUB_ENV
-            echo "BASE_IMAGE=${{ env.GPU_BASE_IMAGE }}" >> $GITHUB_ENV
-            echo "GPU=true" >> $GITHUB_ENV
-          else
-            echo "IMAGE_SUFFIX=" >> $GITHUB_ENV
-            echo "BASE_IMAGE=${{ env.BASE_IMAGE }}" >> $GITHUB_ENV
-            echo "GPU=" >> $GITHUB_ENV
-          fi
-
-      - name: "Checkout Repository"
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - name: "Set up Docker Buildx"
-        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
-
-      - name: "Login to GitHub Container Registry"
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: "Login to Quay Container Registry"
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
-        with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_TOKEN }}
-
-      - name: "Generate Docker metadata"
-        id: meta
-        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
-        with:
-          images: |
-            ghcr.io/${{ github.repository_owner }}/nebari-data-science-pack-${{ matrix.image }}${{ env.IMAGE_SUFFIX }}
-            quay.io/${{ env.DOCKER_ORG }}/nebari-data-science-pack-${{ matrix.image }}${{ env.IMAGE_SUFFIX }}
-
-      - name: "Build and push by digest"
-        id: build
-        uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1 # v6.16.0
-        with:
-          context: ./images
-          file: images/Dockerfile
-          target: ${{ matrix.image }}
-          platforms: ${{ matrix.platform }}
-          labels: ${{ steps.meta.outputs.labels }}
-          annotations: ${{ steps.meta.outputs.annotations }}
-          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/nebari-data-science-pack-${{ matrix.image }}${{ env.IMAGE_SUFFIX }},quay.io/${{ env.DOCKER_ORG }}/nebari-data-science-pack-${{ matrix.image }}${{ env.IMAGE_SUFFIX }}",push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/nebari-data-science-pack-${{ matrix.image }}${{ env.IMAGE_SUFFIX }}:cache-${{ env.PLATFORM_PAIR }}
-          cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref=ghcr.io/{0}/nebari-data-science-pack-{1}{2}:cache-{3},mode=max', github.repository_owner, matrix.image, env.IMAGE_SUFFIX, env.PLATFORM_PAIR) || '' }}
-          build-args: |
-            BASE_IMAGE=${{ env.BASE_IMAGE }}
-            GPU=${{ env.GPU }}
-
-      - name: "Export digest"
-        if: github.event_name != 'pull_request'
-        run: |
-          mkdir -p /tmp/digests/nebari-data-science-pack-${{ matrix.image }}${{ env.IMAGE_SUFFIX }}
-          digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/nebari-data-science-pack-${{ matrix.image }}${{ env.IMAGE_SUFFIX }}/${digest#sha256:}"
-
-      - name: "Upload digest"
-        if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: digests-nebari-data-science-pack-${{ matrix.image }}${{ env.IMAGE_SUFFIX }}-${{ env.PLATFORM_PAIR }}
-          path: /tmp/digests/*
-          if-no-files-found: error
-          retention-days: 1
-
-  merge:
-    name: "Merge ${{ matrix.image }}"
-    runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - image: nebari-data-science-pack-jupyterlab
-            pattern: digests-nebari-data-science-pack-jupyterlab-linux-*
-          - image: nebari-data-science-pack-jupyterlab-gpu
-            pattern: digests-nebari-data-science-pack-jupyterlab-gpu-linux-*
-          - image: nebari-data-science-pack-jupyterhub
-            pattern: digests-nebari-data-science-pack-jupyterhub-linux-*
-
-    steps:
-      - name: "Download digests"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          path: /tmp/digests
-          pattern: ${{ matrix.pattern }}
-          merge-multiple: true
-
-      - name: "Set up Docker Buildx"
-        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
-
-      - name: "Login to GitHub Container Registry"
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: "Login to Quay Container Registry"
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
-        with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_TOKEN }}
-
-      - name: "Generate Docker metadata"
-        id: meta
-        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
-        with:
-          images: |
-            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
-            quay.io/${{ env.DOCKER_ORG }}/${{ matrix.image }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-
-      - name: "Create manifest list and push to GHCR"
-        working-directory: /tmp/digests/${{ matrix.image }}
-        run: |
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map(select(startswith("ghcr.io"))) | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}@sha256:%s ' *)
-
-      - name: "Create manifest list and push to Quay"
-        working-directory: /tmp/digests/${{ matrix.image }}
-        run: |
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map(select(startswith("quay.io"))) | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'quay.io/${{ env.DOCKER_ORG }}/${{ matrix.image }}@sha256:%s ' *)
-
-      - name: "Inspect image"
-        run: |
-          docker buildx imagetools inspect 'ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ steps.meta.outputs.version }}'
+  jupyterhub:
+    name: "jupyterhub"
+    uses: ./.github/workflows/build-image.yaml
+    with:
+      image: nebari-data-science-pack-jupyterhub
+      target: jupyterhub
+    secrets:
+      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+      QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
