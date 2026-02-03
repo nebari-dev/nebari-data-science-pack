@@ -14,6 +14,22 @@ update_settings(k8s_upsert_timeout_secs=600)
 # k3d clusters use context name format: k3d-<cluster-name>
 allow_k8s_contexts('k3d-nebari-dev')
 
+# Build images locally from images/Dockerfile
+# Reference: https://docs.tilt.dev/api.html#api.docker_build
+docker_build(
+    'nebari-data-science-pack-jupyterhub',
+    context='./images',
+    dockerfile='./images/Dockerfile',
+    target='jupyterhub',
+)
+
+docker_build(
+    'nebari-data-science-pack-jupyterlab',
+    context='./images',
+    dockerfile='./images/Dockerfile',
+    target='jupyterlab',
+)
+
 # Deploy the Helm chart using helm() for templating
 # Reference: https://docs.tilt.dev/helm.html
 # Using helm() instead of helm_resource() because:
@@ -25,6 +41,13 @@ k8s_yaml(helm(
     '.',
     name='data-science-pack',
     namespace='default',
+    set=[
+        # Override pinned images with local builds
+        'jupyterhub.hub.image.name=nebari-data-science-pack-jupyterhub',
+        'jupyterhub.hub.image.tag=latest',
+        'jupyterhub.singleuser.image.name=nebari-data-science-pack-jupyterlab',
+        'jupyterhub.singleuser.image.tag=latest',
+    ],
 ))
 
 # Configure the proxy resource for port forwarding

@@ -28,6 +28,9 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 *.egg-info/
+# Pixi (local package environments)
+.pixi/
+*/.pixi/
 # Documentation
 *.md
 docs/
