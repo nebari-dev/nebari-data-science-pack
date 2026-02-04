@@ -1,0 +1,26 @@
+{{- if .Values.nicapp.enabled }}
+apiVersion: apps.nic.nebari.dev/v1
+kind: NicApp
+metadata:
+  name: {{ include "nebari-data-science-pack.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+spec:
+  hostname: {{ required "nicapp.hostname is required when nicapp.enabled is true" .Values.nicapp.hostname }}
+  service:
+    name: {{ include "nebari-data-science-pack.fullname" . }}-proxy-public
+    port: {{ .Values.nicapp.service.port | default 80 }}
+  {{- with .Values.nicapp.tls }}
+  tls:
+    enabled: {{ .enabled | default true }}
+    mode: {{ .mode | default "wildcard" }}
+  {{- end }}
+  {{- with .Values.nicapp.auth }}
+  auth:
+    enabled: {{ .enabled | default true }}
+    provider: {{ .provider | default "keycloak" }}
+    provisionClient: {{ .provisionClient | default true }}
+  {{- end }}
+  gateway: {{ .Values.nicapp.gateway | default "public" }}
+{{- end }}
