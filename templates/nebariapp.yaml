@@ -1,0 +1,24 @@
+{{- if .Values.nebariapp.enabled }}
+apiVersion: apps.nebari.dev/v1
+kind: NebariApp
+metadata:
+  name: {{ include "nebari-data-science-pack.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+spec:
+  hostname: {{ required "nebariapp.hostname is required when nebariapp.enabled is true" .Values.nebariapp.hostname }}
+  service:
+    name: {{ .Values.nebariapp.service.name | default "proxy-public" }}
+    port: {{ .Values.nebariapp.service.port | default 80 }}
+  {{- with .Values.nebariapp.routing }}
+  routing:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.nebariapp.auth }}
+  auth:
+    enabled: {{ .enabled | default true }}
+    provider: {{ .provider | default "keycloak" }}
+    provisionClient: {{ .provisionClient | default true }}
+  {{- end }}
+{{- end }}

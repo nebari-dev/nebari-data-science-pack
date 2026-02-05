@@ -1,6 +1,27 @@
 # Default values for nebari-data-science-pack
 # This is a YAML-formatted file.
 
+# =============================================================================
+# Nebari Integration
+# =============================================================================
+# Creates a NebariApp CRD that configures routing and auth via nebari-operator.
+# Set to false when deploying outside of Nebari.
+nebariapp:
+  enabled: true
+  # hostname: jupyter.nic.local  # Required when enabled
+  service:
+    # JupyterHub proxy service (created by jupyterhub subchart)
+    name: proxy-public
+    port: 80
+  # routing:
+  #   routes:
+  #     - pathPrefix: /
+  #       pathType: Exact
+  auth:
+    enabled: true
+    provider: keycloak
+    provisionClient: true
+
 # Shared storage configuration (disabled - requires RWX storage class)
 sharedStorage:
   enabled: false
