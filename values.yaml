@@ -21,6 +21,12 @@ nebariapp:
     enabled: true
     provider: keycloak
     provisionClient: true
+    redirectURI: /hub/oauth_callback  # JupyterHub's OAuth callback
+    scopes:
+      - openid
+      - profile
+      - email
+      - groups
 
 # Shared storage configuration (disabled - requires RWX storage class)
 sharedStorage:
