@@ -42,6 +42,8 @@ k8s_yaml(helm(
     name='data-science-pack',
     namespace='default',
     set=[
+        # Disable NebariApp CRD for local dev (not running on Nebari)
+        'nebariapp.enabled=false',
         # Override pinned images with local builds
         'jupyterhub.hub.image.name=nebari-data-science-pack-jupyterhub',
         'jupyterhub.hub.image.tag=latest',
