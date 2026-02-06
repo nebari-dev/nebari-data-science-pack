@@ -23,12 +23,8 @@ docker_build(
     target='jupyterhub',
 )
 
-docker_build(
-    'nebari-data-science-pack-jupyterlab',
-    context='./images',
-    dockerfile='./images/Dockerfile',
-    target='jupyterlab',
-)
+# JupyterLab image: Use quay.io/nebari/nebari-data-science-pack-jupyterlab from values.yaml
+# (no local build needed - singleuser pods pull directly from quay.io)
 
 # Deploy the Helm chart using helm() for templating
 # Reference: https://docs.tilt.dev/helm.html
@@ -44,11 +40,9 @@ k8s_yaml(helm(
     set=[
         # Disable NebariApp CRD for local dev (not running on Nebari)
         'nebariapp.enabled=false',
-        # Override pinned images with local builds
+        # Override hub image with local build (singleuser uses quay.io from values.yaml)
         'jupyterhub.hub.image.name=nebari-data-science-pack-jupyterhub',
         'jupyterhub.hub.image.tag=latest',
-        'jupyterhub.singleuser.image.name=nebari-data-science-pack-jupyterlab',
-        'jupyterhub.singleuser.image.tag=latest',
     ],
 ))
 
