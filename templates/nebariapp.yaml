@@ -1,5 +1,5 @@
 {{- if .Values.nebariapp.enabled }}
-apiVersion: apps.nebari.dev/v1
+apiVersion: reconcilers.nebari.dev/v1
 kind: NebariApp
 metadata:
   name: {{ include "nebari-data-science-pack.fullname" . }}
