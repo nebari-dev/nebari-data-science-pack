@@ -5,6 +5,8 @@ metadata:
   labels:
     {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
 data:
+  00-gateway-auth.py: |
+{{ .Files.Get "config/jupyterhub/00-gateway-auth.py" | indent 4 }}
   01-spawner.py: |
 {{ .Files.Get "config/jupyterhub/01-spawner.py" | indent 4 }}
   02-jhub-apps.py: |

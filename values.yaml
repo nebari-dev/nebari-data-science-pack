@@ -39,6 +39,11 @@ sharedStorage:
 # JupyterHub configuration
 # All values under this key are passed to the jupyterhub subchart
 jupyterhub:
+  # custom is read by z2jh's get_config("custom.<key>") in hub config files.
+  # external-url is used by 02-jhub-apps.py to set JupyterHub.bind_url so that
+  # internal OAuth redirects use the real hostname instead of 0.0.0.0.
+  custom:
+    external-url: ""
   hub:
     # Custom Nebari hub image with jhub-apps pre-installed
     image:

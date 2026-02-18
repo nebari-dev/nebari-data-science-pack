@@ -4,9 +4,17 @@
 from kubespawner import KubeSpawner
 from jhub_apps import theme_template_paths, themes
 from jhub_apps.configuration import install_jhub_apps
+from z2jh import get_config
 
 # Configure jhub-apps
-c.JupyterHub.bind_url = "http://0.0.0.0:8000"
+# bind_url must include the real external hostname so JupyterHub constructs
+# correct OAuth redirect URLs for internal services like jhub-apps.
+# See: nebari's 02-spawner.py for the same pattern.
+domain = get_config("custom.external-url", "")
+if domain:
+    c.JupyterHub.bind_url = f"https://{domain}"
+else:
+    c.JupyterHub.bind_url = "http://0.0.0.0:8000"
 c.JupyterHub.default_url = "/hub/home"
 c.JupyterHub.template_paths = theme_template_paths
 c.JupyterHub.template_vars = themes.DEFAULT_THEME
