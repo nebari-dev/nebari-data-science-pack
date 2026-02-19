@@ -46,7 +46,20 @@ class EnvoyOIDCAuthenticator(Authenticator):
             self.log.warning("No username claim in IdToken: %s", list(claims.keys()))
             return None
 
-        return username
+        # Extract groups from the token (set by the "groups" scope / group mapper)
+        groups = claims.get("groups", [])
+        # Keycloak returns groups as paths (e.g. "/admin"), strip leading slash
+        groups = [g.strip("/") for g in groups]
+
+        # Determine admin from group membership
+        admin_groups = set(get_config("custom.admin-groups", ["admin"]))
+        is_admin = bool(admin_groups & set(groups))
+
+        return {
+            "name": username,
+            "admin": is_admin,
+            "groups": groups,
+        }
 
 
 if get_config("custom.external-url", ""):
