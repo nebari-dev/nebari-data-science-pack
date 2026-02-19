@@ -124,10 +124,11 @@ jupyterhub:
     extraEnv:
       JUPYTERHUB_SINGLEUSER_APP: "jupyter_server.serverapp.ServerApp"
 
+    # Storage: type "none" required because jhub-apps' JHubSpawner expects volumes
+    # as a list, but the subchart's dynamic storage generates a dict.
+    # Home directory PVC is configured in 01-spawner.py instead.
     storage:
-      type: dynamic
-      capacity: 10Gi
-      homeMountPath: /home/{username}
+      type: none
 
   proxy:
     service:
