@@ -19,8 +19,16 @@ c.JupyterHub.default_url = "/hub/home"
 c.JupyterHub.template_paths = theme_template_paths
 c.JupyterHub.template_vars = themes.DEFAULT_THEME
 c.JAppsConfig.jupyterhub_config_path = "/usr/local/etc/jupyterhub/jupyterhub_config.py"
-c.JAppsConfig.hub_host = "hub"
-c.JAppsConfig.service_workers = 4
+
+# Apply JAppsConfig overrides from Helm values (jupyterhub.custom.japps-config).
+# Any key in the dict is set as an attribute on c.JAppsConfig, e.g.:
+#   japps-config:
+#     app_title: "My Launcher"
+#     service_workers: 2
+#     allowed_frameworks: ["panel", "streamlit"]
+japps_config = get_config("custom.japps-config", {})
+for key, value in japps_config.items():
+    setattr(c.JAppsConfig, key, value)
 
 # Install jhub-apps (sets up service, roles, etc.)
 c = install_jhub_apps(c, spawner_to_subclass=KubeSpawner)
