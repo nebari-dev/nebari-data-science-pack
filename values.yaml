@@ -124,9 +124,10 @@ jupyterhub:
     extraEnv:
       JUPYTERHUB_SINGLEUSER_APP: "jupyter_server.serverapp.ServerApp"
 
-    # Storage configuration - use "none" to avoid dict format incompatibility with Nebari hub image
     storage:
-      type: none
+      type: dynamic
+      capacity: 10Gi
+      homeMountPath: /home/{username}
 
   proxy:
     service:
