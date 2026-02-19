@@ -44,6 +44,19 @@ jupyterhub:
   # internal OAuth redirects use the real hostname instead of 0.0.0.0.
   custom:
     external-url: ""
+    # jhub-apps (JAppsConfig) overrides.
+    # Any key here is set as an attribute on c.JAppsConfig before install_jhub_apps().
+    # See https://jhub-apps.nebari.dev/docs/configuration for available options.
+    japps-config:
+      hub_host: "hub"
+      service_workers: 4
+      # app_title: "JHub Apps Launcher"
+      # app_icon: ""
+      # conda_envs: []
+      # allowed_frameworks: []
+      # blocked_frameworks: []
+      # additional_services: []
+      # startup_apps: []
   hub:
     # Custom Nebari hub image with jhub-apps pre-installed
     image:
