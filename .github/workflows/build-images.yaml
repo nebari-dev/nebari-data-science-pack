@@ -28,12 +28,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  jupyterlab-base:
+    name: "jupyterlab-base"
+    uses: ./.github/workflows/build-image.yaml
+    with:
+      image: nebari-data-science-pack-jupyterlab-base
+      target: jupyterlab
+    secrets:
+      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+      QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+
   jupyterlab:
     name: "jupyterlab"
     uses: ./.github/workflows/build-image.yaml
     with:
       image: nebari-data-science-pack-jupyterlab
+      target: jupyterlab-nebi
+    secrets:
+      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+      QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+
+  jupyterlab-gpu-base:
+    name: "jupyterlab-gpu-base"
+    uses: ./.github/workflows/build-image.yaml
+    with:
+      image: nebari-data-science-pack-jupyterlab-gpu-base
       target: jupyterlab
+      build_arm64: false
+      base_image: "nvidia/cuda:12.8.1-base-ubuntu24.04"
+      gpu: true
     secrets:
       QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
       QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
@@ -43,8 +66,8 @@ jobs:
     uses: ./.github/workflows/build-image.yaml
     with:
       image: nebari-data-science-pack-jupyterlab-gpu
-      target: jupyterlab
-      build_arm64: false  # GPU images only for amd64 (NVIDIA servers)
+      target: jupyterlab-nebi
+      build_arm64: false
       base_image: "nvidia/cuda:12.8.1-base-ubuntu24.04"
       gpu: true
     secrets:
