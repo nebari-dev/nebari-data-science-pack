@@ -23,6 +23,7 @@ c.ServerProxy.servers = {
         "command": ["nebi", "serve", "--port", "{port}"],
         "timeout": 20,
         "absolute_url": True,
+        "new_browser_tab": False,
         "environment": {
             "NEBI_SERVER_BASE_PATH": "{base_url}nebi",
             "NEBI_MODE": "local",
