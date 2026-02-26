@@ -1,0 +1,4 @@
+# Treat lock files as binary to avoid unresolvable merge conflicts.
+# On conflict, pick one side and re-lock.
+pixi.lock linguist-generated merge=binary
+Chart.lock linguist-generated merge=binary
