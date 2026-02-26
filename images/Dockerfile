@@ -106,11 +106,19 @@ ENV PATH=/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${NVIDIA_PATH}:$PATH
 # ========== jupyterlab + nebi ===========
 FROM jupyterlab AS jupyterlab-nebi
 
-ARG NEBI_VERSION=0.7
-ARG TARGETARCH
+# TEMPORARY: using nebi from main branch (sha-6a19116) for NEBI_SERVER_BASE_PATH support.
+# When the next nebi release (>0.7) is out, replace the COPY below with the commented-out
+# ARG/RUN block, updating NEBI_VERSION to the new release version.
+#
+# ARG NEBI_VERSION=<new-version>
+# ARG TARGETARCH
+# RUN curl -fsSL \
+#     "https://github.com/nebari-dev/nebi/releases/download/v${NEBI_VERSION}/nebi_${NEBI_VERSION}_linux_$([ "${TARGETARCH}" = "amd64" ] && echo "x86_64" || echo "arm64").tar.gz" \
+#     | tar -xz -C /usr/local/bin nebi
+COPY --from=quay.io/nebari/nebi:sha-6a19116 /app/nebi /usr/local/bin/nebi
 
-RUN curl -fsSL \
-    "https://github.com/nebari-dev/nebi/releases/download/v${NEBI_VERSION}/nebi_${NEBI_VERSION}_linux_$([ "${TARGETARCH}" = "amd64" ] && echo "x86_64" || echo "arm64").tar.gz" \
-    | tar -xz -C /usr/local/bin nebi
-
-COPY nebi/jupyter_server_config.py /opt/jupyterlab/.pixi/envs/default/etc/jupyter/jupyter_server_config.d/nebi.py
+COPY nebi/jupyter_server_config.py /usr/local/etc/jupyter/jupyter_server_config.py
+COPY nebi/icons /usr/local/etc/jupyter/icons
+# WORKAROUND for https://github.com/nebari-dev/jupyterlab-launchpad/issues/73
+# Remove this line (and images/nebi/custom/) when the bug is fixed.
+COPY nebi/custom/custom.css /root/.jupyter/custom/custom.css
