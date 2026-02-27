@@ -118,8 +118,8 @@ jupyterhub:
 
   singleuser:
     image:
-      name: quay.io/nebari/nebari-data-science-pack-jupyterlab
-      tag: "latest"
+      name: quay.io/nebari/nebari-data-science-pack-jupyterlab@sha256
+      tag: "ac46fa18b712758f025c87d21cc5faf3c4bb553d4ae70ae8e16ff46beabae661"
     defaultUrl: "/lab"
     extraEnv:
       JUPYTERHUB_SINGLEUSER_APP: "jupyter_server.serverapp.ServerApp"
