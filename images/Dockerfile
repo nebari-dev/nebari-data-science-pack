@@ -101,3 +101,20 @@ RUN /opt/jupyterlab/postBuild
 ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib64
 ENV NVIDIA_PATH=/usr/local/nvidia/bin
 ENV PATH=/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${NVIDIA_PATH}:$PATH
+
+
+# ========== jupyterlab + nebi ===========
+FROM jupyterlab AS jupyterlab-nebi
+
+ARG NEBI_VERSION=0.8
+ARG TARGETARCH
+
+RUN curl -fsSL \
+    "https://github.com/nebari-dev/nebi/releases/download/v${NEBI_VERSION}/nebi_${NEBI_VERSION}_linux_$([ "${TARGETARCH}" = "amd64" ] && echo "x86_64" || echo "arm64").tar.gz" \
+    | tar -xz -C /usr/local/bin nebi
+
+COPY nebi/jupyter_server_config.py /usr/local/etc/jupyter/jupyter_server_config.py
+COPY nebi/icons /usr/local/etc/jupyter/icons
+# WORKAROUND for https://github.com/nebari-dev/jupyterlab-launchpad/issues/73
+# Remove this line (and images/nebi/custom/) when the bug is fixed.
+COPY nebi/custom/custom.css /root/.jupyter/custom/custom.css

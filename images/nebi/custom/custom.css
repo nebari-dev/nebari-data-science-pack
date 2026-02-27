@@ -1,0 +1,15 @@
+/* WORKAROUND for https://github.com/nebari-dev/jupyterlab-launchpad/issues/73
+   jupyterlab-launchpad doesn't render icon_path for server-proxy entries.
+   When the bug is fixed, delete this entire directory (images/nebi/custom/)
+   and remove the related lines from:
+     - images/nebi/jupyter_server_config.py  (the c.LabApp.custom_css line)
+     - images/Dockerfile                     (the COPY nebi/custom line)
+*/
+.jp-LauncherCard[title^="Nebi"] .jp-Icon-cover {
+  background-image: url('/server-proxy/icon/nebi');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  width: 52px;
+  height: 52px;
+}
