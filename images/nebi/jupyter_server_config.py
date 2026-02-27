@@ -10,14 +10,6 @@ ICON_PATH = os.path.join(
     "nebi.svg",
 )
 
-# WORKAROUND for https://github.com/nebari-dev/jupyterlab-launchpad/issues/73
-# jupyterlab-launchpad doesn't render icon_path for server-proxy entries.
-# This loads custom CSS that injects the icon via background-image.
-# When the bug is fixed, remove this line AND:
-#   - delete images/nebi/custom/ directory
-#   - remove the COPY nebi/custom line from images/Dockerfile
-c.LabApp.custom_css = True
-
 c.ServerProxy.servers = {
     "nebi": {
         "command": ["nebi", "serve", "--port", "{port}"],

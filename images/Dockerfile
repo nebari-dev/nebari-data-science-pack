@@ -115,6 +115,3 @@ RUN curl -fsSL \
 
 COPY nebi/jupyter_server_config.py /usr/local/etc/jupyter/jupyter_server_config.py
 COPY nebi/icons /usr/local/etc/jupyter/icons
-# WORKAROUND for https://github.com/nebari-dev/jupyterlab-launchpad/issues/73
-# Remove this line (and images/nebi/custom/) when the bug is fixed.
-COPY nebi/custom/custom.css /root/.jupyter/custom/custom.css

@@ -16,11 +16,11 @@ down:
 	-pkill -f "tilt up" 2>/dev/null || true
 	ctlptl delete -f ctlptl-config.yaml
 
-JUPYTERLAB_CONTAINER = jupyterlab-nebi-test
-JUPYTERLAB_IMAGE = jupyterlab-nebi:test
+JUPYTERLAB_CONTAINER = jupyterlab-test
+JUPYTERLAB_IMAGE = jupyterlab:test
 JUPYTERLAB_PORT = 8888
 
-# Build and run the jupyterlab-nebi image for local testing
+# Build and run the jupyterlab image for local testing
 # Stops and removes any existing container first
 jupyterlab:
 	@if docker ps -a --format '{{.Names}}' | grep -q '^$(JUPYTERLAB_CONTAINER)$$'; then \
@@ -28,7 +28,7 @@ jupyterlab:
 		docker stop $(JUPYTERLAB_CONTAINER) >/dev/null 2>&1 || true; \
 		docker rm $(JUPYTERLAB_CONTAINER) >/dev/null 2>&1 || true; \
 	fi
-	docker build --target jupyterlab-nebi -t $(JUPYTERLAB_IMAGE) images/
+	docker build --target jupyterlab -t $(JUPYTERLAB_IMAGE) images/
 	docker run -d --name $(JUPYTERLAB_CONTAINER) -p $(JUPYTERLAB_PORT):8888 \
 		$(JUPYTERLAB_IMAGE) \
 		jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root \
