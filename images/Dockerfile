@@ -58,8 +58,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     xvfb
 
 
-# ========== jupyterlab install ===========
-FROM intermediate AS jupyterlab
+# ========== jupyterlab-base install ===========
+FROM intermediate AS jupyterlab-base
 
 ARG GPU
 
@@ -103,8 +103,8 @@ ENV NVIDIA_PATH=/usr/local/nvidia/bin
 ENV PATH=/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${NVIDIA_PATH}:$PATH
 
 
-# ========== jupyterlab + nebi ===========
-FROM jupyterlab AS jupyterlab-nebi
+# ========== jupyterlab (base + nebi) ===========
+FROM jupyterlab-base AS jupyterlab
 
 ARG NEBI_VERSION=0.8
 ARG TARGETARCH
