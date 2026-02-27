@@ -35,7 +35,6 @@ jobs:
       image: nebari-data-science-pack-jupyterlab-base
       target: jupyterlab-base
     secrets:
-      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
       QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
 
   jupyterlab:
@@ -45,7 +44,6 @@ jobs:
       image: nebari-data-science-pack-jupyterlab
       target: jupyterlab
     secrets:
-      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
       QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
 
   jupyterlab-gpu-base:
@@ -58,7 +56,6 @@ jobs:
       base_image: "nvidia/cuda:12.8.1-base-ubuntu24.04"
       gpu: true
     secrets:
-      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
       QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
 
   jupyterlab-gpu:
@@ -71,7 +68,6 @@ jobs:
       base_image: "nvidia/cuda:12.8.1-base-ubuntu24.04"
       gpu: true
     secrets:
-      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
       QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
 
   jupyterhub:
@@ -81,5 +77,4 @@ jobs:
       image: nebari-data-science-pack-jupyterhub
       target: jupyterhub
     secrets:
-      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
       QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
