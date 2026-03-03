@@ -10,16 +10,25 @@ ICON_PATH = os.path.join(
     "nebi.svg",
 )
 
+# Build environment for nebi serve.
+# NEBI_REMOTE_URL is set by the JupyterHub spawner when a Nebi team server
+# is deployed alongside this pack. When present, the local Nebi instance
+# will auto-connect to the remote server using the user's Keycloak cookie.
+nebi_env = {
+    "NEBI_SERVER_BASE_PATH": "{base_url}nebi",
+    "NEBI_MODE": "local",
+}
+nebi_remote_url = os.environ.get("NEBI_REMOTE_URL", "")
+if nebi_remote_url:
+    nebi_env["NEBI_REMOTE_URL"] = nebi_remote_url
+
 c.ServerProxy.servers = {
     "nebi": {
         "command": ["nebi", "serve", "--port", "{port}"],
         "timeout": 20,
         "absolute_url": True,
         "new_browser_tab": False,
-        "environment": {
-            "NEBI_SERVER_BASE_PATH": "{base_url}nebi",
-            "NEBI_MODE": "local",
-        },
+        "environment": nebi_env,
         "launcher_entry": {
             "title": "Nebi",
             "enabled": True,
