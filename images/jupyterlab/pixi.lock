@@ -460,6 +460,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/fb/86/dd6e5db36df29e76c7a7699123569a4a18c1623ce68d826ed96c62643cae/mdit_py_plugins-0.5.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a4/8e/469e5a4a2f5855992e425f3cb33804cc07bf18d48f2db061aec61ce50270/more_itertools-10.8.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/c1/bb/ff2ec25b56acabf288b38cdc977619347ab6e0f98c119cf0101f6644d904/nb_nebi_kernels-0.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/b2/be/ce3368145f22d64095e03591deeb26986b749b0b1c8373d426f8312c3a96/panel-1.8.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fa/3d/f4f2ba829efb54b6cd2d91349c7463316a9cc55a43fc980447416c88540f/pkginfo-1.12.1.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/29/1c/1b83ffb56adb76abe46df91439e9a613bba45e4612a4e6a7bbebca0b35bb/plotlydash_tornado_cmd-0.0.6-py3-none-any.whl
@@ -939,6 +940,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/fb/86/dd6e5db36df29e76c7a7699123569a4a18c1623ce68d826ed96c62643cae/mdit_py_plugins-0.5.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a4/8e/469e5a4a2f5855992e425f3cb33804cc07bf18d48f2db061aec61ce50270/more_itertools-10.8.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/c1/bb/ff2ec25b56acabf288b38cdc977619347ab6e0f98c119cf0101f6644d904/nb_nebi_kernels-0.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/b2/be/ce3368145f22d64095e03591deeb26986b749b0b1c8373d426f8312c3a96/panel-1.8.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fa/3d/f4f2ba829efb54b6cd2d91349c7463316a9cc55a43fc980447416c88540f/pkginfo-1.12.1.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/29/1c/1b83ffb56adb76abe46df91439e9a613bba45e4612a4e6a7bbebca0b35bb/plotlydash_tornado_cmd-0.0.6-py3-none-any.whl
@@ -6443,6 +6445,15 @@ packages:
   - pkg:pypi/narwhals?source=hash-mapping
   size: 180520
   timestamp: 1741613573009
+- pypi: https://files.pythonhosted.org/packages/c1/bb/ff2ec25b56acabf288b38cdc977619347ab6e0f98c119cf0101f6644d904/nb_nebi_kernels-0.1-py3-none-any.whl
+  name: nb-nebi-kernels
+  version: '0.1'
+  sha256: cf6494d685112e43c38f04cb706320db96c526448411ca1c31f358caa50a54d4
+  requires_dist:
+  - jupyter-client>=8.0.0
+  - jupyter-core>=5.0.0
+  - jupyter-server>=2.0.0
+  requires_python: '>=3.10'
 - conda: https://conda.anaconda.org/conda-forge/noarch/nb_conda_kernels-2.5.1-pyh707e725_2.conda
   sha256: 2aaf48824b2bba5af5fe6c36c3d2a8314fee52b3b86e9f84c6009817ba19309c
   md5: 076e6d822442987779a6622092a8fb6a
