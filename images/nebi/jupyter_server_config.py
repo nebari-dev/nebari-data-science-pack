@@ -22,6 +22,8 @@ nebi_remote_url = os.environ.get("NEBI_REMOTE_URL", "")
 if nebi_remote_url:
     nebi_env["NEBI_REMOTE_URL"] = nebi_remote_url
 
+c.ServerApp.terminado_settings = {"shell_command": ["/bin/bash"]}
+
 c.ServerProxy.servers = {
     "nebi": {
         "command": ["nebi", "serve", "--port", "{port}"],

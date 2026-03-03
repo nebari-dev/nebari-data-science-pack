@@ -106,9 +106,12 @@ ENV PATH=/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${NVIDIA_PATH}:$PATH
 # ========== jupyterlab (base + nebi) ===========
 FROM jupyterlab-base AS jupyterlab
 
-# TEMPORARY: Using local nebi binary instead of downloading from GitHub
-COPY nebi/nebi-binary /usr/local/bin/nebi
-RUN chmod +x /usr/local/bin/nebi
+ARG NEBI_VERSION=0.9
+ARG TARGETARCH
+
+RUN curl -fsSL \
+    "https://github.com/nebari-dev/nebi/releases/download/v${NEBI_VERSION}/nebi_${NEBI_VERSION}_linux_$([ "${TARGETARCH}" = "amd64" ] && echo "x86_64" || echo "arm64").tar.gz" \
+    | tar -xz -C /usr/local/bin nebi
 
 COPY nebi/jupyter_server_config.py /usr/local/etc/jupyter/jupyter_server_config.py
 COPY nebi/icons /usr/local/etc/jupyter/icons
