@@ -23,6 +23,7 @@ if nebi_remote_url:
     nebi_env["NEBI_REMOTE_URL"] = nebi_remote_url
 
 c.ServerApp.terminado_settings = {"shell_command": ["/bin/bash"]}
+c.ServerApp.kernel_spec_manager_class = "nb_nebi_kernels.NebiKernelSpecManager"
 
 c.ServerProxy.servers = {
     "nebi": {
