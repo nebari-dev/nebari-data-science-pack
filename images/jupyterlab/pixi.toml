@@ -13,6 +13,9 @@ nb_conda_kernels = "*"
 ipython = ">7"
 jupyter-server-proxy = ">=4.4.0"
 jupyter_server = ">=2.13.0"
+# httpx 0.28 removed the `proxies` kwarg from AsyncClient, which JupyterLab 4.2.5
+# still uses in its extension manager. Pin httpx <0.28 until JupyterLab is upgraded.
+httpx = "<0.28"
 jupyterlab = "==4.2.5"
 jupyter_client = "*"
 jupyter_console = "*"
