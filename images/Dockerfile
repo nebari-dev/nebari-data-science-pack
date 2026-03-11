@@ -106,7 +106,7 @@ ENV PATH=/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${NVIDIA_PATH}:$PATH
 # ========== jupyterlab (base + nebi) ===========
 FROM jupyterlab-base AS jupyterlab
 
-ARG NEBI_VERSION=0.9
+ARG NEBI_VERSION=0.10.0-rc2
 ARG TARGETARCH
 
 RUN curl -fsSL \
