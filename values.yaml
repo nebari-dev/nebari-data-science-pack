@@ -155,7 +155,7 @@ jupyterhub:
                 matchLabels:
                   gateway.envoyproxy.io/owning-gateway-name: nebari-gateway
           ports:
-            - port: 8443
+            - port: 10443
               protocol: TCP
 
   proxy:
