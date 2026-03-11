@@ -142,21 +142,8 @@ jupyterhub:
     storage:
       type: none
 
-    networkPolicy:
-      egress:
-        # Allow singleuser pods to reach the Envoy Gateway proxy (for nebi API via external hostname).
-        # The LoadBalancer VIP gets DNAT'd by kube-proxy to an envoy proxy pod IP,
-        # so we must allow egress to that specific pod on HTTPS.
-        - to:
-            - namespaceSelector:
-                matchLabels:
-                  kubernetes.io/metadata.name: envoy-gateway-system
-              podSelector:
-                matchLabels:
-                  gateway.envoyproxy.io/owning-gateway-name: nebari-gateway
-          ports:
-            - port: 10443
-              protocol: TCP
+    # networkPolicy:
+    #   egress: []  # Override in deployment-specific values (e.g., data-science-pack.yaml)
 
   proxy:
     service:
