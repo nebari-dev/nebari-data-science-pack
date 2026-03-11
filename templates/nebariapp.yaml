@@ -26,4 +26,39 @@ spec:
       {{- toYaml . | nindent 6 }}
     {{- end }}
   {{- end }}
+  {{- with .Values.nebariapp.landingPage }}
+  landingPage:
+    enabled: {{ .enabled | default false }}
+    {{- with .displayName }}
+    displayName: {{ . | quote }}
+    {{- end }}
+    {{- with .description }}
+    description: {{ . | quote }}
+    {{- end }}
+    {{- with .icon }}
+    icon: {{ . | quote }}
+    {{- end }}
+    {{- with .category }}
+    category: {{ . | quote }}
+    {{- end }}
+    {{- with .priority }}
+    priority: {{ . }}
+    {{- end }}
+    {{- with .externalUrl }}
+    externalUrl: {{ . | quote }}
+    {{- end }}
+    {{- with .healthCheck }}
+    healthCheck:
+      enabled: {{ .enabled | default false }}
+      {{- with .path }}
+      path: {{ . | quote }}
+      {{- end }}
+      {{- with .intervalSeconds }}
+      intervalSeconds: {{ . }}
+      {{- end }}
+      {{- with .timeoutSeconds }}
+      timeoutSeconds: {{ . }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
 {{- end }}
