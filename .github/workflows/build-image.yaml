@@ -178,6 +178,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=tag
+            type=sha,prefix=sha-
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: "Create manifest list and push"
