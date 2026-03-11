@@ -17,6 +17,16 @@ ICON_PATH = os.path.join(
 nebi_env = {
     "NEBI_SERVER_BASE_PATH": "{base_url}nebi",
     "NEBI_MODE": "local",
+    "NEBI_DATABASE_DSN": os.path.join(
+        os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")),
+        "nebi",
+        "nebi.db",
+    ),
+    "NEBI_STORAGE_WORKSPACES_DIR": os.path.join(
+        os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")),
+        "nebi",
+        "workspaces",
+    ),
 }
 nebi_remote_url = os.environ.get("NEBI_REMOTE_URL", "")
 if nebi_remote_url:
