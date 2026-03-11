@@ -31,6 +31,5 @@ jupyterlab:
 	docker build --target jupyterlab -t $(JUPYTERLAB_IMAGE) images/
 	docker run -d --name $(JUPYTERLAB_CONTAINER) -p $(JUPYTERLAB_PORT):8888 \
 		$(JUPYTERLAB_IMAGE) \
-		jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root \
-		--ServerApp.token='' --ServerApp.password=''
+		bash -c "id ubuntu >/dev/null 2>&1 || useradd -u 1001 -m ubuntu; su ubuntu -c 'PATH=/opt/jupyterlab/.pixi/envs/default/bin:\$$PATH jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token=\"\" --ServerApp.password=\"\"'"
 	@echo "JupyterLab running at http://localhost:$(JUPYTERLAB_PORT)"

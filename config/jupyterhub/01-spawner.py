@@ -1,6 +1,8 @@
 """KubeSpawner configuration."""
 # ruff: noqa: F821 - `c` is a magic global provided by JupyterHub
 
+from z2jh import get_config
+
 # Home directory: Dynamic PVC per user via the cluster's default StorageClass.
 # We configure volumes here instead of via singleuser.storage in values.yaml because
 # jhub-apps' JHubSpawner expects volumes as a list, but the subchart's dynamic storage
@@ -30,6 +32,16 @@ c.KubeSpawner.volume_mounts = [
 
 c.KubeSpawner.notebook_dir = "/home/jovyan"
 c.KubeSpawner.working_dir = "/home/jovyan"
-c.KubeSpawner.environment = {
+
+# Nebi remote server URL — when set, JupyterLab pods auto-connect to the
+# Nebi team server using the user's Keycloak IdToken cookie.
+# Read from JupyterHub custom config (set via values.yaml jupyterhub.custom.nebi-remote-url).
+nebi_remote_url = get_config("custom.nebi-remote-url", "")
+
+env = {
     "HOME": "/home/jovyan",
 }
+if nebi_remote_url:
+    env["NEBI_REMOTE_URL"] = nebi_remote_url
+
+c.KubeSpawner.environment = env

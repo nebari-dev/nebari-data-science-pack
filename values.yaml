@@ -36,6 +36,17 @@ sharedStorage:
   accessModes:
     - ReadWriteMany
 
+# =============================================================================
+# Nebi Integration
+# =============================================================================
+# When the nebi-pack is deployed alongside data-science-pack, set remoteURL
+# so that JupyterLab pods auto-connect to the Nebi team server.
+nebi:
+  # URL of the remote Nebi server (e.g., https://nebi.nebari.example.com)
+  # When set, the Nebi local instance in each JupyterLab pod will auto-connect
+  # to this server using the user's Keycloak IdToken cookie.
+  remoteURL: ""
+
 # JupyterHub configuration
 # All values under this key are passed to the jupyterhub subchart
 jupyterhub:
@@ -44,6 +55,7 @@ jupyterhub:
   # internal OAuth redirects use the real hostname instead of 0.0.0.0.
   custom:
     external-url: ""
+    nebi-remote-url: ""  # Set by templates from .Values.nebi.remoteURL
     # jhub-apps (JAppsConfig) overrides.
     # Any key here is set as an attribute on c.JAppsConfig before install_jhub_apps().
     # See https://jhub-apps.nebari.dev/docs/configuration for available options.
@@ -129,6 +141,9 @@ jupyterhub:
     # Home directory PVC is configured in 01-spawner.py instead.
     storage:
       type: none
+
+    # networkPolicy:
+    #   egress: []  # Override in deployment-specific values (e.g., data-science-pack.yaml)
 
   proxy:
     service:

@@ -9,10 +9,12 @@ platforms = ["linux-64", "linux-aarch64"]
 python = "3.12.*"
 
 # jupyterhub/jupyterlab
-nb_conda_kernels = "*"
 ipython = ">7"
 jupyter-server-proxy = ">=4.4.0"
 jupyter_server = ">=2.13.0"
+# httpx 0.28 removed the `proxies` kwarg from AsyncClient, which JupyterLab 4.2.5
+# still uses in its extension manager. Pin httpx <0.28 until JupyterLab is upgraded.
+httpx = "<0.28"
 jupyterlab = "==4.2.5"
 jupyter_client = "*"
 jupyter_console = "*"
@@ -73,6 +75,7 @@ pyjwt = "<2.10.0"
 
 [pypi-dependencies]
 jupyter-vscode-proxy = { git = "https://github.com/betatim/vscode-binder.git" }
+nb_nebi_kernels = "==0.1"
 jupyterlab_nvdashboard = "==0.12.0"
 argo-jupyter-scheduler = "==2024.6.1"
 jhub-apps = "==2025.11.1"
