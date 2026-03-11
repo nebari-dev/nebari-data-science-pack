@@ -142,6 +142,16 @@ jupyterhub:
     storage:
       type: none
 
+    networkPolicy:
+      egress:
+        # Allow singleuser pods to reach the Envoy Gateway (for nebi API via external hostname).
+        # The LoadBalancer VIP gets DNAT'd to a pod IP in the envoy-gateway-system namespace,
+        # so we must allow egress to that namespace.
+        - to:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: envoy-gateway-system
+
   proxy:
     service:
       type: ClusterIP
