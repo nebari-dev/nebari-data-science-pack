@@ -3,6 +3,7 @@
 
 import json
 import logging
+import os
 from urllib.parse import urlencode
 
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -132,7 +133,8 @@ async def _nebi_pre_spawn_hook(spawner):
     keycloak_url = get_config("custom.keycloak-token-url", "")
     nebi_cid = get_config("custom.nebi-client-id", "")
     hub_cid = get_config("custom.jupyterhub-client-id", "")
-    hub_secret = get_config("custom.jupyterhub-client-secret", "")
+    # Read from env var (mounted from K8s secret) to avoid plaintext in Helm values.
+    hub_secret = os.environ.get("JUPYTERHUB_OIDC_CLIENT_SECRET", "")
     nebi_url = get_config("custom.nebi-internal-url", "")
 
     if not all([keycloak_url, nebi_cid, hub_cid, hub_secret, nebi_url]):
