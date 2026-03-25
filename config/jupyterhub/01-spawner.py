@@ -115,13 +115,20 @@ async def _exchange_access_token_for_nebi_id_token(
         "client_secret": hub_client_secret,
         "requested_token_type": "urn:ietf:params:oauth:token-type:id_token",
     })
-    resp = await AsyncHTTPClient().fetch(HTTPRequest(
-        keycloak_url,
-        method="POST",
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        body=body,
-        request_timeout=10,
-    ))
+    try:
+        resp = await AsyncHTTPClient().fetch(HTTPRequest(
+            keycloak_url,
+            method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            body=body,
+            request_timeout=10,
+        ))
+    except Exception as exc:
+        resp_body = getattr(exc, "response", None)
+        if resp_body is not None:
+            resp_body = resp_body.body.decode() if resp_body.body else ""
+        log.error("Keycloak token exchange error: %s response=%s", exc, resp_body)
+        raise
     return json.loads(resp.body).get("access_token", "")
 
 
