@@ -71,6 +71,31 @@ c.KubeSpawner.environment = env
 # Token exchange lets Keycloak issue a new ID token for the correct audience.
 
 
+async def _refresh_access_token(refresh_token, keycloak_url, hub_client_id, hub_client_secret):
+    """Use the refresh token to get a fresh access token from Keycloak.
+
+    Access tokens expire in minutes. The refresh token (stored in auth_state
+    from Envoy's RefreshToken cookie) has a much longer lifetime and can be
+    used to obtain a fresh access token without user interaction.
+
+    Returns the new access token string, or None on failure.
+    """
+    body = urlencode({
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": hub_client_id,
+        "client_secret": hub_client_secret,
+    })
+    resp = await AsyncHTTPClient().fetch(HTTPRequest(
+        keycloak_url,
+        method="POST",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        body=body,
+        request_timeout=10,
+    ))
+    return json.loads(resp.body).get("access_token", "")
+
+
 async def _exchange_access_token_for_nebi_id_token(
     access_token, keycloak_url, nebi_client_id, hub_client_id, hub_client_secret,
 ):
@@ -126,8 +151,8 @@ async def _nebi_pre_spawn_hook(spawner):
     Non-fatal: if any step fails, the pod still spawns without auto-auth.
     """
     auth_state = await spawner.user.get_auth_state()
-    if not auth_state or not auth_state.get("access_token"):
-        log.warning("No access_token in auth_state for %s, skipping Nebi auto-auth", spawner.user.name)
+    if not auth_state:
+        log.warning("No auth_state for %s, skipping Nebi auto-auth", spawner.user.name)
         return
 
     keycloak_url = get_config("custom.keycloak-token-url", "")
@@ -142,8 +167,23 @@ async def _nebi_pre_spawn_hook(spawner):
         return
 
     try:
+        # Refresh the access token first — it expires in minutes, but the
+        # refresh token (from Envoy's RefreshToken cookie) lasts much longer.
+        access_token = auth_state.get("access_token", "")
+        refresh_token = auth_state.get("refresh_token")
+        if refresh_token:
+            access_token = await _refresh_access_token(
+                refresh_token, keycloak_url, hub_cid, hub_secret,
+            )
+            if not access_token:
+                log.warning("Token refresh returned no access token for %s", spawner.user.name)
+                return
+        elif not access_token:
+            log.warning("No access_token or refresh_token for %s, skipping", spawner.user.name)
+            return
+
         nebi_id_token = await _exchange_access_token_for_nebi_id_token(
-            auth_state["access_token"], keycloak_url, nebi_cid, hub_cid, hub_secret,
+            access_token, keycloak_url, nebi_cid, hub_cid, hub_secret,
         )
         if not nebi_id_token:
             log.warning("Keycloak token exchange returned no token for %s", spawner.user.name)

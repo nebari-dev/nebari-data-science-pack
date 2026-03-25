@@ -33,13 +33,21 @@ class EnvoyOIDCAuthenticator(Authenticator):
         #   token endpoint (RFC 8693) for a token with a different audience —
         #   e.g., exchanging a JupyterHub access token for a Nebi ID token.
         #   Stored in auth_state for the spawner's pre_spawn_hook to use.
+        #
+        # RefreshToken (RefreshToken-<suffix>):
+        #   Long-lived token for obtaining fresh access tokens. Access tokens
+        #   expire in minutes, so the pre_spawn_hook uses the refresh token
+        #   to get a fresh access token before doing the exchange.
         id_token = None
         access_token = None
+        refresh_token = None
         for name, value in handler.request.cookies.items():
             if name.startswith("IdToken"):
                 id_token = value.value
             elif name.startswith("AccessToken"):
                 access_token = value.value
+            elif name.startswith("RefreshToken"):
+                refresh_token = value.value
 
         if not id_token:
             self.log.warning("No IdToken cookie found")
@@ -75,6 +83,7 @@ class EnvoyOIDCAuthenticator(Authenticator):
             "auth_state": {
                 "id_token": id_token,
                 "access_token": access_token,
+                "refresh_token": refresh_token,
             },
         }
 
