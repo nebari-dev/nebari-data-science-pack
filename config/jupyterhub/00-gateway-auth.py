@@ -59,6 +59,7 @@ class EnvoyOIDCAuthenticator(Authenticator):
             "name": username,
             "admin": is_admin,
             "groups": groups,
+            "auth_state": {"id_token": id_token},
         }
 
 
@@ -66,3 +67,4 @@ if get_config("custom.external-url", ""):
     c.JupyterHub.authenticator_class = EnvoyOIDCAuthenticator
     # All users who pass Keycloak auth at the gateway are allowed
     c.Authenticator.allow_all = True
+    c.Authenticator.enable_auth_state = True

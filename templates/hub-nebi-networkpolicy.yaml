@@ -1,0 +1,27 @@
+{{- if and .Values.nebi.internalURL .Values.nebi.namespace }}
+# Allows the JupyterHub pod to reach the Nebi server for token exchange
+# at spawn time (pre_spawn_hook calls /api/v1/auth/session).
+# Kubernetes NetworkPolicy is additive — this rule is evaluated alongside
+# the JupyterHub subchart's default network policies.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-hub-nebi-egress
+  labels:
+    {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      component: hub
+      app: jupyterhub
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.nebi.namespace }}
+      ports:
+        - port: 8460
+          protocol: TCP
+{{- end }}

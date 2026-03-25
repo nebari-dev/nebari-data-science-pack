@@ -32,6 +32,10 @@ nebi_remote_url = os.environ.get("NEBI_REMOTE_URL", "")
 if nebi_remote_url:
     nebi_env["NEBI_REMOTE_URL"] = nebi_remote_url
 
+nebi_auth_token = os.environ.get("NEBI_AUTH_TOKEN", "")
+if nebi_auth_token:
+    nebi_env["NEBI_AUTH_TOKEN"] = nebi_auth_token
+
 c.ServerApp.terminado_settings = {"shell_command": ["/bin/bash"]}
 c.ServerApp.kernel_spec_manager_class = "nb_nebi_kernels.NebiKernelSpecManager"
 

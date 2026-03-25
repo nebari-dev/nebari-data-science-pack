@@ -46,6 +46,11 @@ nebi:
   # When set, the Nebi local instance in each JupyterLab pod will auto-connect
   # to this server using the user's Keycloak IdToken cookie.
   remoteURL: ""
+  # Cluster-internal URL for Hub -> Nebi token exchange at spawn time.
+  # Example: http://nebi-pack-nebari-nebi-pack.nebi.svc.cluster.local
+  internalURL: ""
+  # Namespace where nebi-pack is deployed (enables hub -> nebi network policy).
+  namespace: ""
 
 # JupyterHub configuration
 # All values under this key are passed to the jupyterhub subchart
@@ -55,7 +60,8 @@ jupyterhub:
   # internal OAuth redirects use the real hostname instead of 0.0.0.0.
   custom:
     external-url: ""
-    nebi-remote-url: ""  # Set by templates from .Values.nebi.remoteURL
+    nebi-remote-url: ""   # Set from .Values.nebi.remoteURL
+    nebi-internal-url: "" # Set from .Values.nebi.internalURL
     # jhub-apps (JAppsConfig) overrides.
     # Any key here is set as an attribute on c.JAppsConfig before install_jhub_apps().
     # See https://jhub-apps.nebari.dev/docs/configuration for available options.

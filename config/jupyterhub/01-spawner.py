@@ -45,3 +45,40 @@ if nebi_remote_url:
     env["NEBI_REMOTE_URL"] = nebi_remote_url
 
 c.KubeSpawner.environment = env
+
+# Nebi auto-authentication: exchange the user's Keycloak IdToken for a Nebi JWT
+# at spawn time so JupyterLab pods are pre-authenticated with the remote Nebi server.
+nebi_internal_url = get_config("custom.nebi-internal-url", "")
+
+if nebi_remote_url and nebi_internal_url:
+    from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+    import json as _json
+
+    async def _nebi_pre_spawn_hook(spawner):
+        """Exchange Keycloak IdToken for Nebi JWT at spawn time."""
+        auth_state = await spawner.user.get_auth_state()
+        if not auth_state or "id_token" not in auth_state:
+            spawner.log.warning("No IdToken in auth_state, skipping Nebi auto-auth")
+            return
+
+        session_url = f"{nebi_internal_url.rstrip('/')}/api/v1/auth/session"
+        try:
+            request = HTTPRequest(
+                session_url,
+                method="GET",
+                headers={"Cookie": f"IdToken={auth_state['id_token']}"},
+                request_timeout=10,
+            )
+            response = await AsyncHTTPClient().fetch(request)
+            data = _json.loads(response.body)
+            token = data.get("token", "")
+            if token:
+                spawner.environment["NEBI_AUTH_TOKEN"] = token
+                spawner.log.info("Nebi auto-auth succeeded for %s", spawner.user.name)
+            else:
+                spawner.log.warning("Nebi session response had no token")
+        except Exception:
+            # Non-fatal: pod still spawns, user just won't be auto-authenticated
+            spawner.log.exception("Nebi auto-auth failed (pod will still spawn)")
+
+    c.KubeSpawner.pre_spawn_hook = _nebi_pre_spawn_hook
