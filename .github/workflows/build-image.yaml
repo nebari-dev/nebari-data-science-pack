@@ -32,6 +32,11 @@ on:
         required: false
         default: false
         type: boolean
+      nebi_image:
+        description: "Nebi Docker image to copy binary from (e.g., quay.io/nebari/nebi:sha-abc). Leave empty to use GitHub release."
+        required: false
+        default: ""
+        type: string
     secrets:
       QUAY_TOKEN:
         required: true
@@ -68,22 +73,21 @@ jobs:
           file: images/Dockerfile
           target: ${{ inputs.target }}
           platforms: linux/amd64
-          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/${{ inputs.image }},quay.io/${{ env.DOCKER_ORG }}/${{ inputs.image }}",push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
+          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/${{ inputs.image }},quay.io/${{ env.DOCKER_ORG }}/${{ inputs.image }}",push-by-digest=true,name-canonical=true,push=true
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}:cache-linux-amd64
           cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref=ghcr.io/{0}/{1}:cache-linux-amd64,mode=max', github.repository_owner, inputs.image) || '' }}
           build-args: |
             BASE_IMAGE=${{ inputs.base_image }}
             GPU=${{ inputs.gpu }}
+            NEBI_IMAGE=${{ inputs.nebi_image }}
 
       - name: "Export digest"
-        if: github.event_name != 'pull_request'
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: "Upload digest"
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ inputs.image }}-digest-linux-amd64
@@ -119,22 +123,21 @@ jobs:
           file: images/Dockerfile
           target: ${{ inputs.target }}
           platforms: linux/arm64
-          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/${{ inputs.image }},quay.io/${{ env.DOCKER_ORG }}/${{ inputs.image }}",push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
+          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/${{ inputs.image }},quay.io/${{ env.DOCKER_ORG }}/${{ inputs.image }}",push-by-digest=true,name-canonical=true,push=true
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}:cache-linux-arm64
           cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref=ghcr.io/{0}/{1}:cache-linux-arm64,mode=max', github.repository_owner, inputs.image) || '' }}
           build-args: |
             BASE_IMAGE=${{ inputs.base_image }}
             GPU=${{ inputs.gpu }}
+            NEBI_IMAGE=${{ inputs.nebi_image }}
 
       - name: "Export digest"
-        if: github.event_name != 'pull_request'
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: "Upload digest"
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ inputs.image }}-digest-linux-arm64
@@ -145,7 +148,7 @@ jobs:
   merge:
     name: "Merge"
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' && !cancelled() && !failure()
+    if: "!cancelled() && !failure()"
     needs: [build-amd64, build-arm64]
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -177,6 +180,7 @@ jobs:
             quay.io/${{ env.DOCKER_ORG }}/${{ inputs.image }}
           tags: |
             type=ref,event=branch
+            type=ref,event=pr
             type=ref,event=tag
             type=sha,prefix=sha-
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
