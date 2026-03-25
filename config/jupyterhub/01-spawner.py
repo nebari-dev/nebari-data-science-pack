@@ -38,9 +38,10 @@ c.KubeSpawner.working_dir = "/home/jovyan"
 # Read from JupyterHub custom config (set via values.yaml jupyterhub.custom.nebi-remote-url).
 nebi_remote_url = get_config("custom.nebi-remote-url", "")
 
-env = {
-    "HOME": "/home/jovyan",
-}
+# Start with extraEnv from values.yaml so deployers can inject env vars
+# (e.g. MLFLOW_TRACKING_URI) without modifying this config file.
+env = dict(get_config("singleuser.extraEnv", {}))
+env["HOME"] = "/home/jovyan"
 if nebi_remote_url:
     env["NEBI_REMOTE_URL"] = nebi_remote_url
 
