@@ -113,7 +113,6 @@ async def _exchange_access_token_for_nebi_id_token(
         "audience": nebi_client_id,
         "client_id": hub_client_id,
         "client_secret": hub_client_secret,
-        "requested_token_type": "urn:ietf:params:oauth:token-type:id_token",
     })
     try:
         resp = await AsyncHTTPClient().fetch(HTTPRequest(
@@ -129,7 +128,9 @@ async def _exchange_access_token_for_nebi_id_token(
             resp_body = resp_body.body.decode() if resp_body.body else ""
         log.error("Keycloak token exchange error: %s response=%s", exc, resp_body)
         raise
-    return json.loads(resp.body).get("access_token", "")
+    data = json.loads(resp.body)
+    # Prefer id_token if present (has user identity claims), fall back to access_token
+    return data.get("id_token") or data.get("access_token", "")
 
 
 async def _exchange_nebi_id_token_for_jwt(nebi_id_token, nebi_internal_url):
