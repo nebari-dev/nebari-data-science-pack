@@ -60,6 +60,31 @@ sharedStorage:
   accessModes:
     - ReadWriteMany
 
+# =============================================================================
+# Nebi Integration
+# =============================================================================
+# When the nebi-pack is deployed alongside data-science-pack, set remoteURL
+# so that JupyterLab pods auto-connect to the Nebi team server.
+nebi:
+  # Nebi binary image. An init container copies the nebi binary from this image
+  # into each JupyterLab pod, so the version is controlled at deploy time rather
+  # than baked into the jupyterlab image.
+  image:
+    repository: quay.io/nebari/nebi
+    tag: ""  # Required: e.g., sha-a2c937a or pr-199
+    pullPolicy: IfNotPresent
+  # URL of the remote Nebi server (e.g., https://nebi.nebari.example.com)
+  # When set, the Nebi local instance in each JupyterLab pod will auto-connect
+  # to this server using the user's Keycloak IdToken cookie.
+  remoteURL: ""
+  # Cluster-internal URL for Hub -> Nebi token exchange at spawn time.
+  # Example: http://nebi-pack-nebari-nebi-pack.nebi.svc.cluster.local
+  internalURL: ""
+  # Namespace where nebi-pack is deployed (enables hub -> nebi network policy).
+  namespace: ""
+  # Port the Nebi server listens on (used in hub -> nebi NetworkPolicy egress rule).
+  port: 8460
+
 # JupyterHub configuration
 # All values under this key are passed to the jupyterhub subchart
 jupyterhub:
@@ -68,6 +93,16 @@ jupyterhub:
   # internal OAuth redirects use the real hostname instead of 0.0.0.0.
   custom:
     external-url: ""
+    nebi-image: ""         # Deployer must set to repository:tag (e.g., quay.io/nebari/nebi:sha-abc)
+    nebi-image-pull-policy: "IfNotPresent"  # Pull policy for nebi init container
+    nebi-remote-url: ""    # Deployer must set to match .Values.nebi.remoteURL
+    nebi-internal-url: ""  # Deployer must set to match .Values.nebi.internalURL
+    # Keycloak token exchange config (for Nebi auto-auth at spawn time).
+    # The hub client secret is read from JUPYTERHUB_OIDC_CLIENT_SECRET env var
+    # (mounted from K8s secret via hub.extraEnv) to avoid plaintext in values.
+    keycloak-token-url: ""   # e.g., http://keycloak-keycloakx-http.keycloak.svc.cluster.local:8080/realms/nebari/protocol/openid-connect/token
+    nebi-client-id: ""       # Nebi's Keycloak OIDC client ID
+    jupyterhub-client-id: "" # JupyterHub's Keycloak OIDC client ID
     # jhub-apps (JAppsConfig) overrides.
     # Any key here is set as an attribute on c.JAppsConfig before install_jhub_apps().
     # See https://jhub-apps.nebari.dev/docs/configuration for available options.
@@ -84,8 +119,8 @@ jupyterhub:
   hub:
     # Custom Nebari hub image with jhub-apps pre-installed
     image:
-      name: quay.io/nebari/nebari-data-science-pack-jupyterhub@sha256
-      tag: "4a3ddf08d87736d3de5a8d1d520ed5038e3bd3c0d4e029cd3452e7e7fbced3a2"
+      name: quay.io/nebari/nebari-data-science-pack-jupyterhub
+      tag: "sha-443d1fe"
 
     config:
       JupyterHub:
@@ -142,8 +177,8 @@ jupyterhub:
 
   singleuser:
     image:
-      name: quay.io/nebari/nebari-data-science-pack-jupyterlab@sha256
-      tag: "ac46fa18b712758f025c87d21cc5faf3c4bb553d4ae70ae8e16ff46beabae661"
+      name: quay.io/nebari/nebari-data-science-pack-jupyterlab
+      tag: "sha-443d1fe"
     defaultUrl: "/lab"
     extraEnv:
       JUPYTERHUB_SINGLEUSER_APP: "jupyter_server.serverapp.ServerApp"
@@ -153,6 +188,9 @@ jupyterhub:
     # Home directory PVC is configured in 01-spawner.py instead.
     storage:
       type: none
+
+    # networkPolicy:
+    #   egress: []  # Override in deployment-specific values (e.g., data-science-pack.yaml)
 
   proxy:
     service:
