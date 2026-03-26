@@ -141,7 +141,7 @@ RUN PATH="/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${PATH}" \
 # Inject @font-face into JupyterLab's index.html so the browser loads the
 # Nerd Font. This is the only reliable method in JupyterLab 4.2.x (the
 # customCssFiles page config and custom_css mechanisms don't work).
-RUN sed -i 's|</head>|<style>@font-face{font-family:"FiraCode Nerd Font";src:url("static/lab/fonts/FiraCodeNerdFontMono-Regular.ttf") format("truetype");font-weight:400;font-display:swap}@font-face{font-family:"FiraCode Nerd Font";src:url("static/lab/fonts/FiraCodeNerdFontMono-Bold.ttf") format("truetype");font-weight:700;font-display:swap}</style></head>|' \
+RUN sed -i 's|</head>|<style>@font-face{font-family:"FiraCode Nerd Font";src:url("../static/lab/fonts/FiraCodeNerdFontMono-Regular.ttf") format("truetype");font-weight:400;font-display:swap}@font-face{font-family:"FiraCode Nerd Font";src:url("../static/lab/fonts/FiraCodeNerdFontMono-Bold.ttf") format("truetype");font-weight:700;font-display:swap}</style></head>|' \
     /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static/index.html
 
 # Shell configuration
