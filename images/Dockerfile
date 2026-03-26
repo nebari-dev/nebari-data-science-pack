@@ -137,7 +137,6 @@ RUN curl -fsSL "https://github.com/starship/starship/releases/download/v${STARSH
 COPY terminal/bashrc /etc/skel/.bashrc
 COPY terminal/nebari-terminal.sh /etc/profile.d/nebari-terminal.sh
 COPY terminal/starship.toml /etc/starship.toml
-RUN mkdir -p /etc/skel/.config && cp /etc/starship.toml /etc/skel/.config/starship.toml
 
 # JupyterLab settings overrides
 COPY terminal/overrides.json /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/settings/overrides.json
