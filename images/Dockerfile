@@ -144,10 +144,16 @@ COPY terminal/nebari-terminal.sh /etc/profile.d/nebari-terminal.sh
 COPY terminal/starship.toml /etc/starship.toml
 RUN mkdir -p /etc/skel/.config && cp /etc/starship.toml /etc/skel/.config/starship.toml
 
-# JupyterLab settings overrides, custom CSS for font loading, and page config
+# JupyterLab settings overrides
 COPY terminal/overrides.json /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/settings/overrides.json
-COPY terminal/page_config.json /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/settings/page_config.json
-COPY terminal/custom.css /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static/custom.css
+
+# Inject @font-face for Fira Code Nerd Font into JupyterLab theme CSS files.
+# customCssFiles is not supported in JupyterLab 4.2.x, so we append directly
+# to the theme CSS that gets loaded when a theme is active.
+COPY terminal/custom.css /tmp/custom-font.css
+RUN for theme_css in /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/themes/@jupyterlab/theme-*/index.css; do \
+        cat /tmp/custom-font.css >> "$theme_css"; \
+    done && rm /tmp/custom-font.css
 
 COPY nebi/jupyter_server_config.py /usr/local/etc/jupyter/jupyter_server_config.py
 COPY nebi/icons /usr/local/etc/jupyter/icons
