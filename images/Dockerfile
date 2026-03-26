@@ -133,11 +133,6 @@ RUN curl -fsSL "https://github.com/starship/starship/releases/download/v${STARSH
     | tar -xz -C /usr/local/bin starship \
     && chmod +x /usr/local/bin/starship
 
-# Install Fira Code Nerd Font (TTF for browser + system)
-# unzip is provided by pixi; add pixi env to PATH for this step
-RUN PATH="/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${PATH}" \
-    /opt/scripts/install-fonts.sh "/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static"
-
 # Shell configuration
 COPY terminal/bashrc /etc/skel/.bashrc
 COPY terminal/nebari-terminal.sh /etc/profile.d/nebari-terminal.sh
@@ -146,14 +141,6 @@ RUN mkdir -p /etc/skel/.config && cp /etc/starship.toml /etc/skel/.config/starsh
 
 # JupyterLab settings overrides
 COPY terminal/overrides.json /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/settings/overrides.json
-
-# Inject @font-face for Fira Code Nerd Font into JupyterLab theme CSS files.
-# customCssFiles is not supported in JupyterLab 4.2.x, so we append directly
-# to the theme CSS that gets loaded when a theme is active.
-COPY terminal/custom.css /tmp/custom-font.css
-RUN for theme_css in /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/themes/@jupyterlab/theme-*/index.css; do \
-        cat /tmp/custom-font.css >> "$theme_css"; \
-    done && rm /tmp/custom-font.css
 
 COPY nebi/jupyter_server_config.py /usr/local/etc/jupyter/jupyter_server_config.py
 COPY nebi/icons /usr/local/etc/jupyter/icons

@@ -1,99 +1,61 @@
-# Nebari default Starship configuration (Catppuccin Mocha powerline theme)
+# Nebari default Starship configuration
 # Users can override by creating ~/.config/starship.toml
 
 "$schema" = 'https://starship.rs/config-schema.json'
 
+add_newline = false
+
 format = """
-[](red)\
-$os\
 $username\
-[](bg:peach fg:red)\
 $directory\
-[](bg:yellow fg:peach)\
 $git_branch\
 $git_status\
-[](fg:yellow bg:green)\
 $python\
-[](fg:green bg:sapphire)\
 $conda\
-[](fg:sapphire bg:lavender)\
-$time\
-[ ](fg:lavender)\
 $cmd_duration\
 $line_break\
 $character"""
 
-add_newline = false
-palette = 'catppuccin_mocha'
-
-[os]
-disabled = false
-style = "bg:red fg:crust"
-format = '[ $symbol ]($style)'
-
-[os.symbols]
-Windows = ""
-Ubuntu = "󰕈"
-Macos = "󰀵"
-Linux = "󰌽"
-Debian = "󰣚"
-Fedora = "󰣛"
-Arch = "󰣇"
-Alpine = ""
-Amazon = ""
-CentOS = ""
-Redhat = "󱄛"
-
 [username]
 show_always = true
-style_user = "bg:red fg:crust"
-style_root = "bg:red fg:crust"
-format = '[ $user ]($style)'
+style_user = "bold blue"
+style_root = "bold red"
+format = '[$user]($style) '
 
 [directory]
-style = "bg:peach fg:crust"
-format = "[ $path ]($style)"
 truncation_length = 3
-truncation_symbol = "…/"
+truncation_symbol = ".../"
+style = "bold cyan"
+format = '[$path]($style) '
 
 [git_branch]
 symbol = ""
-style = "bg:yellow"
-format = '[[ $symbol $branch ](fg:crust bg:yellow)]($style)'
+style = "bold purple"
+format = '[$symbol$branch]($style) '
 
 [git_status]
-style = "bg:yellow"
-format = '[[($all_status$ahead_behind )](fg:crust bg:yellow)]($style)'
+style = "bold red"
+format = '([$all_status$ahead_behind]($style) )'
 
 [python]
-symbol = ""
-style = "bg:green"
-format = '[[ $symbol( $version)(\(#$virtualenv\)) ](fg:crust bg:green)]($style)'
+symbol = "py "
+style = "bold yellow"
+format = '[$symbol$version]($style) '
 
 [conda]
-symbol = "  "
-style = "fg:crust bg:sapphire"
-format = '[$symbol$environment ]($style)'
+symbol = "conda "
+style = "bold green"
+format = '[$symbol$environment]($style) '
 ignore_base = false
 
-[time]
-disabled = false
-time_format = "%R"
-style = "bg:lavender"
-format = '[[  $time ](fg:crust bg:lavender)]($style)'
-
-[line_break]
-disabled = false
+[cmd_duration]
+min_time = 2000
+style = "bold yellow"
+format = '[took $duration]($style) '
 
 [character]
-disabled = false
-success_symbol = '[❯](bold fg:green)'
-error_symbol = '[❯](bold fg:red)'
-
-[cmd_duration]
-format = " in $duration "
-disabled = false
-min_time = 2000
+success_symbol = '[>](bold green)'
+error_symbol = '[>](bold red)'
 
 # Disable noisy modules
 [aws]
@@ -110,31 +72,3 @@ disabled = true
 disabled = true
 [nodejs]
 disabled = true
-
-[palettes.catppuccin_mocha]
-rosewater = "#f5e0dc"
-flamingo = "#f2cdcd"
-pink = "#f5c2e7"
-mauve = "#cba6f7"
-red = "#f38ba8"
-maroon = "#eba0ac"
-peach = "#fab387"
-yellow = "#f9e2af"
-green = "#a6e3a1"
-teal = "#94e2d5"
-sky = "#89dceb"
-sapphire = "#74c7ec"
-blue = "#89b4fa"
-lavender = "#b4befe"
-text = "#cdd6f4"
-subtext1 = "#bac2de"
-subtext0 = "#a6adc8"
-overlay2 = "#9399b2"
-overlay1 = "#7f849c"
-overlay0 = "#6c7086"
-surface2 = "#585b70"
-surface1 = "#45475a"
-surface0 = "#313244"
-base = "#1e1e2e"
-mantle = "#181825"
-crust = "#11111b"
