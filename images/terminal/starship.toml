@@ -1,5 +1,5 @@
 # Nebari default Starship configuration
-# Users can override by creating ~/.config/starship.toml
+# Users can override by setting STARSHIP_CONFIG in their .bashrc
 
 "$schema" = 'https://starship.rs/config-schema.json'
 
@@ -26,10 +26,10 @@ format = '[$user]($style) '
 truncation_length = 3
 truncation_symbol = ".../"
 style = "bold cyan"
-format = '[$path]($style) '
+format = '[ $path]($style) '
 
 [git_branch]
-symbol = ""
+symbol = " "
 style = "bold purple"
 format = '[$symbol$branch]($style) '
 
@@ -38,12 +38,12 @@ style = "bold red"
 format = '([$all_status$ahead_behind]($style) )'
 
 [python]
-symbol = "py "
+symbol = " "
 style = "bold yellow"
 format = '[$symbol$version]($style) '
 
 [conda]
-symbol = "conda "
+symbol = " "
 style = "bold green"
 format = '[$symbol$environment]($style) '
 ignore_base = false

@@ -133,6 +133,17 @@ RUN curl -fsSL "https://github.com/starship/starship/releases/download/v${STARSH
     | tar -xz -C /usr/local/bin starship \
     && chmod +x /usr/local/bin/starship
 
+# Install Fira Code Nerd Font (TTF for browser terminal rendering)
+# unzip is provided by pixi; add pixi env to PATH for this step
+RUN PATH="/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${PATH}" \
+    /opt/scripts/install-fonts.sh "/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static"
+
+# Inject @font-face into JupyterLab's index.html so the browser loads the
+# Nerd Font. This is the only reliable method in JupyterLab 4.2.x (the
+# customCssFiles page config and custom_css mechanisms don't work).
+RUN sed -i 's|</head>|<style>@font-face{font-family:"FiraCode Nerd Font";src:url("static/lab/fonts/FiraCodeNerdFontMono-Regular.ttf") format("truetype");font-weight:400;font-display:swap}@font-face{font-family:"FiraCode Nerd Font";src:url("static/lab/fonts/FiraCodeNerdFontMono-Bold.ttf") format("truetype");font-weight:700;font-display:swap}</style></head>|' \
+    /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static/index.html
+
 # Shell configuration
 COPY terminal/bashrc /etc/skel/.bashrc
 COPY terminal/nebari-terminal.sh /etc/profile.d/nebari-terminal.sh
