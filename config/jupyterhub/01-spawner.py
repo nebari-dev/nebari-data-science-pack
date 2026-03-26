@@ -47,6 +47,34 @@ c.KubeSpawner.working_dir = "/home/jovyan"
 
 
 # ---------------------------------------------------------------------------
+# Nebi binary (init container)
+# ---------------------------------------------------------------------------
+# Copy the nebi binary from the nebi server image into the JupyterLab pod
+# so the version matches what the deployment specifies, not what was baked
+# into the jupyterlab image at build time.
+nebi_image = get_config("custom.nebi-image", "")
+if nebi_image:
+    c.KubeSpawner.volumes.append({
+        "name": "nebi-bin",
+        "emptyDir": {},
+    })
+    c.KubeSpawner.volume_mounts.append({
+        "name": "nebi-bin",
+        "mountPath": "/usr/local/bin/nebi",
+        "subPath": "nebi",
+    })
+    c.KubeSpawner.init_containers.append({
+        "name": "install-nebi",
+        "image": nebi_image,
+        "command": ["cp", "/app/nebi", "/nebi-bin/nebi"],
+        "volumeMounts": [{
+            "name": "nebi-bin",
+            "mountPath": "/nebi-bin",
+        }],
+    })
+
+
+# ---------------------------------------------------------------------------
 # Environment variables
 # ---------------------------------------------------------------------------
 env = {

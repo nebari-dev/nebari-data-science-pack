@@ -42,6 +42,13 @@ sharedStorage:
 # When the nebi-pack is deployed alongside data-science-pack, set remoteURL
 # so that JupyterLab pods auto-connect to the Nebi team server.
 nebi:
+  # Nebi binary image. An init container copies the nebi binary from this image
+  # into each JupyterLab pod, so the version is controlled at deploy time rather
+  # than baked into the jupyterlab image.
+  image:
+    repository: quay.io/nebari/nebi
+    tag: ""  # Required: e.g., sha-a2c937a or pr-199
+    pullPolicy: IfNotPresent
   # URL of the remote Nebi server (e.g., https://nebi.nebari.example.com)
   # When set, the Nebi local instance in each JupyterLab pod will auto-connect
   # to this server using the user's Keycloak IdToken cookie.
@@ -60,6 +67,7 @@ jupyterhub:
   # internal OAuth redirects use the real hostname instead of 0.0.0.0.
   custom:
     external-url: ""
+    nebi-image: ""         # Set from .Values.nebi.image (repository:tag)
     nebi-remote-url: ""    # Set from .Values.nebi.remoteURL
     nebi-internal-url: "" # Set from .Values.nebi.internalURL
     # Keycloak token exchange config (for Nebi auto-auth at spawn time).
