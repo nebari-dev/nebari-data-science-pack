@@ -12,13 +12,30 @@ import base64
 import json
 
 from jupyterhub.auth import Authenticator
+from jupyterhub.handlers.login import LogoutHandler
 from z2jh import get_config
+
+
+class EnvoyOIDCLogoutHandler(LogoutHandler):
+    """Redirect to Envoy Gateway's OIDC logout endpoint after JupyterHub logout.
+
+    The base LogoutHandler renders a static "Successfully logged out" page when
+    auto_login is True (to avoid redirect-loop back to auto-login). We override
+    render_logout_page to redirect to Envoy's /logout path instead, which clears
+    the OIDC cookies and terminates the Keycloak session.
+    """
+
+    async def render_logout_page(self):
+        self.redirect("/logout")
 
 
 class EnvoyOIDCAuthenticator(Authenticator):
     """Authenticate users from Envoy Gateway's OIDC IdToken cookie."""
 
     auto_login = True
+
+    def get_handlers(self, app):
+        return [("/logout", EnvoyOIDCLogoutHandler)]
 
     async def authenticate(self, handler, data=None):
         # Envoy Gateway stores two tokens as cookies after OIDC authentication:
@@ -95,7 +112,3 @@ if get_config("custom.external-url", ""):
     # All users who pass Keycloak auth at the gateway are allowed
     c.Authenticator.allow_all = True
     c.Authenticator.enable_auth_state = True
-    # Redirect logout to Envoy Gateway's OIDC logout path, which clears
-    # the IdToken/AccessToken/RefreshToken cookies and terminates the
-    # Keycloak session via the end_session_endpoint.
-    c.JupyterHub.logout_redirect_url = "/logout"
