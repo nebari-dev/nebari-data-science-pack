@@ -106,7 +106,9 @@ RUN curl -fsSL "https://github.com/starship/starship/releases/download/v${STARSH
     && chmod +x /usr/local/bin/starship
 
 # Install Fira Code Nerd Font (woff2 for browser + TTF for system)
-RUN /opt/scripts/install-fonts.sh "/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static"
+# unzip is provided by pixi; add pixi env to PATH for this step
+RUN PATH="/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${PATH}" \
+    /opt/scripts/install-fonts.sh "/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static"
 
 # Shell configuration
 COPY jupyterlab/terminal/bashrc /etc/skel/.bashrc

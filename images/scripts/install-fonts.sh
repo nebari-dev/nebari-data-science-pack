@@ -10,17 +10,23 @@ FONT_DIR="${JUPYTERLAB_STATIC_DIR}/fonts"
 
 mkdir -p "${FONT_DIR}"
 
-DOWNLOAD_URL="https://github.com/ryanoasis/nerd-fonts/releases/download/${NERD_FONTS_VERSION}/FiraCode.tar.xz"
+DOWNLOAD_URL="https://github.com/ryanoasis/nerd-fonts/releases/download/${NERD_FONTS_VERSION}/FiraCode.zip"
 
 # Download and extract only the Mono woff2 variants we need
 TMP_DIR=$(mktemp -d)
-curl -fsSL "${DOWNLOAD_URL}" | tar -xJ -C "${TMP_DIR}"
+curl -fsSL -o "${TMP_DIR}/FiraCode.zip" "${DOWNLOAD_URL}"
 
-# Copy only the woff2 Mono variants (Mono = fixed-width glyphs, required for terminals)
-cp "${TMP_DIR}/FiraCodeNerdFontMono-Regular.woff2" "${FONT_DIR}/"
-cp "${TMP_DIR}/FiraCodeNerdFontMono-Bold.woff2" "${FONT_DIR}/"
+# Extract only the Mono variants we need (Mono = fixed-width glyphs, required for terminals)
+unzip -q "${TMP_DIR}/FiraCode.zip" \
+    'FiraCodeNerdFontMono-Regular.ttf' \
+    'FiraCodeNerdFontMono-Bold.ttf' \
+    -d "${TMP_DIR}"
 
-# Also install TTF to system fonts for any non-browser usage
+# Copy TTF to JupyterLab static dir for browser @font-face loading
+cp "${TMP_DIR}/FiraCodeNerdFontMono-Regular.ttf" "${FONT_DIR}/"
+cp "${TMP_DIR}/FiraCodeNerdFontMono-Bold.ttf" "${FONT_DIR}/"
+
+# Also install to system fonts for any non-browser usage
 mkdir -p /usr/local/share/fonts/firacode-nerd
 cp "${TMP_DIR}/FiraCodeNerdFontMono-Regular.ttf" /usr/local/share/fonts/firacode-nerd/
 cp "${TMP_DIR}/FiraCodeNerdFontMono-Bold.ttf" /usr/local/share/fonts/firacode-nerd/
