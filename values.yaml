@@ -58,6 +58,8 @@ nebi:
   internalURL: ""
   # Namespace where nebi-pack is deployed (enables hub -> nebi network policy).
   namespace: ""
+  # Port the Nebi server listens on (used in hub -> nebi NetworkPolicy egress rule).
+  port: 8460
 
 # JupyterHub configuration
 # All values under this key are passed to the jupyterhub subchart
