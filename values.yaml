@@ -157,7 +157,7 @@ jupyterhub:
     extraVolumes:
       - name: custom-config
         configMap:
-          name: data-science-pack-hub-config
+          name: nebari-data-science-pack-hub-config
 
     extraVolumeMounts:
       - name: custom-config

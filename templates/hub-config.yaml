@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Release.Name }}-hub-config
+  name: {{ include "nebari-data-science-pack.name" . }}-hub-config
   labels:
     {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
 data:
