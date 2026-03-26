@@ -98,6 +98,26 @@ ENV PATH=/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/code-server/bin:${PATH}
 COPY jupyterlab /opt/jupyterlab
 RUN /opt/jupyterlab/postBuild
 
+# ========== terminal customization ===========
+# Install Starship prompt (multi-arch: amd64/arm64)
+ARG STARSHIP_VERSION=1.24.2
+RUN curl -fsSL "https://github.com/starship/starship/releases/download/v${STARSHIP_VERSION}/starship-$(uname -m)-unknown-linux-musl.tar.gz" \
+    | tar -xz -C /usr/local/bin starship \
+    && chmod +x /usr/local/bin/starship
+
+# Install Fira Code Nerd Font (woff2 for browser + TTF for system)
+RUN /opt/scripts/install-fonts.sh "/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static"
+
+# Shell configuration
+COPY jupyterlab/terminal/bashrc /etc/skel/.bashrc
+COPY jupyterlab/terminal/nebari-terminal.sh /etc/profile.d/nebari-terminal.sh
+COPY jupyterlab/terminal/starship.toml /etc/starship.toml
+RUN mkdir -p /etc/skel/.config && cp /etc/starship.toml /etc/skel/.config/starship.toml
+
+# JupyterLab settings overrides and custom CSS for font loading
+COPY jupyterlab/terminal/overrides.json /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/settings/overrides.json
+COPY jupyterlab/terminal/custom.css /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static/custom.css
+
 ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib64
 ENV NVIDIA_PATH=/usr/local/nvidia/bin
 ENV PATH=/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${NVIDIA_PATH}:$PATH
