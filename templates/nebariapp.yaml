@@ -20,7 +20,7 @@ spec:
     enabled: {{ .enabled | default true }}
     provider: {{ .provider | default "keycloak" }}
     provisionClient: {{ .provisionClient | default true }}
-    redirectURI: {{ .redirectURI | default "/hub/oauth_callback" }}
+    redirectURI: {{ .redirectURI | default "/oauth2/callback" }}
     {{- with .scopes }}
     scopes:
       {{- toYaml . | nindent 6 }}
