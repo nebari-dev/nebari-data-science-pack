@@ -144,8 +144,9 @@ COPY terminal/nebari-terminal.sh /etc/profile.d/nebari-terminal.sh
 COPY terminal/starship.toml /etc/starship.toml
 RUN mkdir -p /etc/skel/.config && cp /etc/starship.toml /etc/skel/.config/starship.toml
 
-# JupyterLab settings overrides and custom CSS for font loading
+# JupyterLab settings overrides, custom CSS for font loading, and page config
 COPY terminal/overrides.json /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/settings/overrides.json
+COPY terminal/page_config.json /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/settings/page_config.json
 COPY terminal/custom.css /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static/custom.css
 
 COPY nebi/jupyter_server_config.py /usr/local/etc/jupyter/jupyter_server_config.py

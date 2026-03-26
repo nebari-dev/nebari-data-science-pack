@@ -2,6 +2,7 @@
   "@jupyterlab/terminal-extension:plugin": {
     "fontFamily": "'FiraCode Nerd Font', 'Fira Code', monospace",
     "fontSize": 14,
+    "fontWeight": "bold",
     "lineHeight": 1.2
   },
   "@jupyterlab/apputils-extension:themes": {
