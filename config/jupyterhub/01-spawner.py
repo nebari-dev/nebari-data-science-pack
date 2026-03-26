@@ -66,7 +66,8 @@ if nebi_image:
     c.KubeSpawner.init_containers.append({
         "name": "install-nebi",
         "image": nebi_image,
-        "command": ["cp", "/app/nebi", "/nebi-bin/nebi"],
+        "command": ["sh", "-c", "cp /app/nebi /nebi-bin/nebi && chmod +x /nebi-bin/nebi"],
+        "imagePullPolicy": get_config("custom.nebi-image-pull-policy", "IfNotPresent"),
         "volumeMounts": [{
             "name": "nebi-bin",
             "mountPath": "/nebi-bin",

@@ -70,6 +70,7 @@ jupyterhub:
   custom:
     external-url: ""
     nebi-image: ""         # Deployer must set to repository:tag (e.g., quay.io/nebari/nebi:sha-abc)
+    nebi-image-pull-policy: "IfNotPresent"  # Pull policy for nebi init container
     nebi-remote-url: ""    # Deployer must set to match .Values.nebi.remoteURL
     nebi-internal-url: ""  # Deployer must set to match .Values.nebi.internalURL
     # Keycloak token exchange config (for Nebi auto-auth at spawn time).
