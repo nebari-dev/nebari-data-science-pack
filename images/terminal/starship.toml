@@ -54,8 +54,8 @@ style = "bold yellow"
 format = '[took $duration]($style) '
 
 [character]
-success_symbol = '[>](bold green)'
-error_symbol = '[>](bold red)'
+success_symbol = '[❯](bold green)'
+error_symbol = '[❯](bold red)'
 
 # Disable noisy modules
 [aws]
