@@ -95,3 +95,7 @@ if get_config("custom.external-url", ""):
     # All users who pass Keycloak auth at the gateway are allowed
     c.Authenticator.allow_all = True
     c.Authenticator.enable_auth_state = True
+    # Redirect logout to Envoy Gateway's OIDC logout path, which clears
+    # the IdToken/AccessToken/RefreshToken cookies and terminates the
+    # Keycloak session via the end_session_endpoint.
+    c.JupyterHub.logout_redirect_url = "/logout"
