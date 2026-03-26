@@ -61,6 +61,16 @@ sharedStorage:
     - ReadWriteMany
 
 # =============================================================================
+# Terminal Customization
+# =============================================================================
+# Controls Starship prompt and terminal appearance in JupyterLab.
+# When disabled, the terminal falls back to the default bash prompt.
+# Fira Code Nerd Font and JupyterLab settings overrides remain active
+# (they are baked into the image).
+terminalCustomization:
+  enabled: true
+
+# =============================================================================
 # Nebi Integration
 # =============================================================================
 # When the nebi-pack is deployed alongside data-science-pack, set remoteURL
@@ -103,6 +113,7 @@ jupyterhub:
     keycloak-token-url: ""   # e.g., http://keycloak-keycloakx-http.keycloak.svc.cluster.local:8080/realms/nebari/protocol/openid-connect/token
     nebi-client-id: ""       # Nebi's Keycloak OIDC client ID
     jupyterhub-client-id: "" # JupyterHub's Keycloak OIDC client ID
+    terminal-customization: true  # Set to false to disable Starship prompt in terminals
     # jhub-apps (JAppsConfig) overrides.
     # Any key here is set as an attribute on c.JAppsConfig before install_jhub_apps().
     # See https://jhub-apps.nebari.dev/docs/configuration for available options.

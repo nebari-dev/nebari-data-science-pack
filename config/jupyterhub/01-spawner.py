@@ -83,6 +83,10 @@ if nebi_image:
 env = dict(get_config("singleuser.extraEnv", {}))
 env["HOME"] = "/home/jovyan"
 
+# Terminal customization toggle
+terminal_customization = get_config("custom.terminal-customization", True)
+env["NEBARI_TERMINAL_CUSTOMIZATION"] = "true" if terminal_customization else "false"
+
 nebi_remote_url = get_config("custom.nebi-remote-url", "")
 if nebi_remote_url:
     env["NEBI_REMOTE_URL"] = nebi_remote_url
