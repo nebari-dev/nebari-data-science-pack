@@ -36,7 +36,7 @@ nebi_auth_token = os.environ.get("NEBI_AUTH_TOKEN", "")
 if nebi_auth_token:
     nebi_env["NEBI_AUTH_TOKEN"] = nebi_auth_token
 
-c.ServerApp.terminado_settings = {"shell_command": ["/bin/bash"]}
+c.ServerApp.terminado_settings = {"shell_command": ["/bin/bash", "-l"]}
 c.ServerApp.kernel_spec_manager_class = "nb_nebi_kernels.NebiKernelSpecManager"
 
 c.ServerProxy.servers = {
