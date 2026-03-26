@@ -21,7 +21,7 @@ nebariapp:
     enabled: true
     provider: keycloak
     provisionClient: true
-    redirectURI: /hub/oauth_callback  # JupyterHub's OAuth callback
+    redirectURI: /oauth2/callback  # Envoy Gateway's default OIDC callback
     scopes:
       - openid
       - profile
