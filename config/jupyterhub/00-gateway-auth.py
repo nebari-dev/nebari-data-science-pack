@@ -21,12 +21,33 @@ class EnvoyOIDCAuthenticator(Authenticator):
     auto_login = True
 
     async def authenticate(self, handler, data=None):
-        # Find the IdToken cookie (Envoy uses IdToken-<suffix>)
+        # Envoy Gateway stores two tokens as cookies after OIDC authentication:
+        #
+        # IdToken (IdToken-<suffix>):
+        #   JWT containing user identity claims (sub, email, groups, etc.).
+        #   The `aud` claim is set to THIS client (JupyterHub's Keycloak client).
+        #   Used here to extract the username and groups.
+        #
+        # AccessToken (AccessToken-<suffix>):
+        #   Credential for accessing resources. Can be exchanged at Keycloak's
+        #   token endpoint (RFC 8693) for a token with a different audience —
+        #   e.g., exchanging a JupyterHub access token for a Nebi ID token.
+        #   Stored in auth_state for the spawner's pre_spawn_hook to use.
+        #
+        # RefreshToken (RefreshToken-<suffix>):
+        #   Long-lived token for obtaining fresh access tokens. Access tokens
+        #   expire in minutes, so the pre_spawn_hook uses the refresh token
+        #   to get a fresh access token before doing the exchange.
         id_token = None
+        access_token = None
+        refresh_token = None
         for name, value in handler.request.cookies.items():
             if name.startswith("IdToken"):
                 id_token = value.value
-                break
+            elif name.startswith("AccessToken"):
+                access_token = value.value
+            elif name.startswith("RefreshToken"):
+                refresh_token = value.value
 
         if not id_token:
             self.log.warning("No IdToken cookie found")
@@ -59,6 +80,13 @@ class EnvoyOIDCAuthenticator(Authenticator):
             "name": username,
             "admin": is_admin,
             "groups": groups,
+            "auth_state": {
+                k: v for k, v in {
+                    "id_token": id_token,
+                    "access_token": access_token,
+                    "refresh_token": refresh_token,
+                }.items() if v is not None
+            },
         }
 
 
@@ -66,3 +94,4 @@ if get_config("custom.external-url", ""):
     c.JupyterHub.authenticator_class = EnvoyOIDCAuthenticator
     # All users who pass Keycloak auth at the gateway are allowed
     c.Authenticator.allow_all = True
+    c.Authenticator.enable_auth_state = True

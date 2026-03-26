@@ -103,15 +103,28 @@ ENV NVIDIA_PATH=/usr/local/nvidia/bin
 ENV PATH=/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${NVIDIA_PATH}:$PATH
 
 
+# ========== nebi-source (resolve nebi binary) ===========
+# When NEBI_IMAGE is set (e.g., quay.io/nebari/nebi:sha-abc1234), the binary is
+# copied from that image. Otherwise, downloaded from the GitHub release.
+# Useful for testing unreleased nebi versions.
+ARG NEBI_IMAGE=""
+FROM ${NEBI_IMAGE:-scratch} AS nebi-source
+
 # ========== jupyterlab (base + nebi) ===========
 FROM jupyterlab-base AS jupyterlab
 
 ARG NEBI_VERSION=0.9
 ARG TARGETARCH
 
-RUN curl -fsSL \
-    "https://github.com/nebari-dev/nebi/releases/download/v${NEBI_VERSION}/nebi_${NEBI_VERSION}_linux_$([ "${TARGETARCH}" = "amd64" ] && echo "x86_64" || echo "arm64").tar.gz" \
-    | tar -xz -C /usr/local/bin nebi
+# Install nebi: copy from NEBI_IMAGE if provided, else download from GitHub release.
+RUN --mount=from=nebi-source,dst=/nebi-source \
+    if [ -f /nebi-source/app/nebi ]; then \
+        cp /nebi-source/app/nebi /usr/local/bin/nebi; \
+    else \
+        curl -fsSL \
+        "https://github.com/nebari-dev/nebi/releases/download/v${NEBI_VERSION}/nebi_${NEBI_VERSION}_linux_$([ "${TARGETARCH}" = "amd64" ] && echo "x86_64" || echo "arm64").tar.gz" \
+        | tar -xz -C /usr/local/bin nebi; \
+    fi
 
 COPY nebi/jupyter_server_config.py /usr/local/etc/jupyter/jupyter_server_config.py
 COPY nebi/icons /usr/local/etc/jupyter/icons
