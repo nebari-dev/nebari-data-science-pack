@@ -77,9 +77,10 @@ if nebi_image:
 # ---------------------------------------------------------------------------
 # Environment variables
 # ---------------------------------------------------------------------------
-env = {
-    "HOME": "/home/jovyan",
-}
+# Start with extraEnv from values.yaml so deployers can inject env vars
+# (e.g. MLFLOW_TRACKING_URI) without modifying this config file.
+env = dict(get_config("singleuser.extraEnv", {}))
+env["HOME"] = "/home/jovyan"
 
 nebi_remote_url = get_config("custom.nebi-remote-url", "")
 if nebi_remote_url:
