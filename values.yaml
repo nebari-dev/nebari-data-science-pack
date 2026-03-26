@@ -67,9 +67,9 @@ jupyterhub:
   # internal OAuth redirects use the real hostname instead of 0.0.0.0.
   custom:
     external-url: ""
-    nebi-image: ""         # Set from .Values.nebi.image (repository:tag)
-    nebi-remote-url: ""    # Set from .Values.nebi.remoteURL
-    nebi-internal-url: "" # Set from .Values.nebi.internalURL
+    nebi-image: ""         # Deployer must set to repository:tag (e.g., quay.io/nebari/nebi:sha-abc)
+    nebi-remote-url: ""    # Deployer must set to match .Values.nebi.remoteURL
+    nebi-internal-url: ""  # Deployer must set to match .Values.nebi.internalURL
     # Keycloak token exchange config (for Nebi auto-auth at spawn time).
     # The hub client secret is read from JUPYTERHUB_OIDC_CLIENT_SECRET env var
     # (mounted from K8s secret via hub.extraEnv) to avoid plaintext in values.
