@@ -1,0 +1,62 @@
+# Nebari default Starship configuration
+# Users can override by creating ~/.config/starship.toml
+
+format = """
+$directory\
+$git_branch\
+$git_status\
+$python\
+$conda\
+$cmd_duration\
+$line_break\
+$character"""
+
+[directory]
+truncation_length = 3
+truncation_symbol = ".../"
+style = "bold cyan"
+
+[git_branch]
+symbol = " "
+style = "bold purple"
+
+[git_status]
+style = "bold red"
+modified = "!"
+staged = "+"
+untracked = "?"
+deleted = "✘"
+
+[python]
+symbol = " "
+style = "bold yellow"
+detect_files = ["requirements.txt", "setup.py", "pyproject.toml", "pixi.toml"]
+
+[conda]
+symbol = " "
+style = "bold green"
+
+[cmd_duration]
+min_time = 2000
+style = "bold yellow"
+format = "took [$duration]($style) "
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
+
+# Disable noisy modules
+[aws]
+disabled = true
+[gcloud]
+disabled = true
+[azure]
+disabled = true
+[docker_context]
+disabled = true
+[kubernetes]
+disabled = true
+[package]
+disabled = true
+[nodejs]
+disabled = true
