@@ -81,9 +81,11 @@ class EnvoyOIDCAuthenticator(Authenticator):
             "admin": is_admin,
             "groups": groups,
             "auth_state": {
-                "id_token": id_token,
-                "access_token": access_token,
-                "refresh_token": refresh_token,
+                k: v for k, v in {
+                    "id_token": id_token,
+                    "access_token": access_token,
+                    "refresh_token": refresh_token,
+                }.items() if v is not None
             },
         }
 

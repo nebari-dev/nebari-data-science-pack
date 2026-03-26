@@ -115,13 +115,20 @@ async def _refresh_access_token(refresh_token, keycloak_url, hub_client_id, hub_
         "client_id": hub_client_id,
         "client_secret": hub_client_secret,
     })
-    resp = await AsyncHTTPClient().fetch(HTTPRequest(
-        keycloak_url,
-        method="POST",
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        body=body,
-        request_timeout=10,
-    ))
+    try:
+        resp = await AsyncHTTPClient().fetch(HTTPRequest(
+            keycloak_url,
+            method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            body=body,
+            request_timeout=10,
+        ))
+    except Exception as exc:
+        resp_body = getattr(exc, "response", None)
+        if resp_body is not None:
+            resp_body = resp_body.body.decode() if resp_body.body else ""
+        log.error("Keycloak token refresh error: %s response=%s", exc, resp_body)
+        raise
     return json.loads(resp.body).get("access_token", "")
 
 
@@ -176,6 +183,7 @@ async def _exchange_nebi_id_token_for_jwt(nebi_id_token, nebi_internal_url):
         method="GET",
         headers={"Cookie": f"IdToken={nebi_id_token}"},
         request_timeout=10,
+        follow_redirects=False,
     ))
     return json.loads(resp.body).get("token", "")
 
@@ -206,7 +214,7 @@ async def _nebi_pre_spawn_hook(spawner):
     try:
         # Refresh the access token first — it expires in minutes, but the
         # refresh token (from Envoy's RefreshToken cookie) lasts much longer.
-        access_token = auth_state.get("access_token", "")
+        access_token = auth_state.get("access_token") or ""
         refresh_token = auth_state.get("refresh_token")
         if refresh_token:
             access_token = await _refresh_access_token(
@@ -231,7 +239,7 @@ async def _nebi_pre_spawn_hook(spawner):
             log.warning("Nebi session returned no token for %s", spawner.user.name)
             return
 
-        spawner.environment["NEBI_AUTH_TOKEN"] = nebi_jwt
+        spawner.environment = {**spawner.environment, "NEBI_AUTH_TOKEN": nebi_jwt}
         log.info("Nebi auto-auth succeeded for %s", spawner.user.name)
     except Exception:
         log.exception("Nebi auto-auth failed for %s (pod will still spawn)", spawner.user.name)
