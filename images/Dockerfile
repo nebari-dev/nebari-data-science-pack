@@ -138,10 +138,12 @@ RUN curl -fsSL "https://github.com/starship/starship/releases/download/v${STARSH
 RUN PATH="/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${PATH}" \
     /opt/scripts/install-fonts.sh "/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static"
 
-# Inject @font-face into JupyterLab's index.html so the browser loads the
-# Nerd Font. This is the only reliable method in JupyterLab 4.2.x (the
-# customCssFiles page config and custom_css mechanisms don't work).
-RUN sed -i 's|</head>|<style>@font-face{font-family:"FiraCode Nerd Font";src:url("../static/lab/fonts/FiraCodeNerdFontMono-Regular.ttf") format("truetype");font-weight:400;font-display:swap}@font-face{font-family:"FiraCode Nerd Font";src:url("../static/lab/fonts/FiraCodeNerdFontMono-Bold.ttf") format("truetype");font-weight:700;font-display:swap}</style></head>|' \
+# Inject @font-face, preload, and font-load resize handler into index.html.
+# xterm.js uses Canvas rendering and won't pick up web fonts that load after
+# initialization. We preload the font (high priority), use font-display:block
+# (delays rendering until font loads), and trigger a window resize after
+# document.fonts.ready so xterm.js re-measures with the correct font.
+RUN /opt/scripts/inject-font.sh \
     /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static/index.html
 
 # Shell configuration
