@@ -59,6 +59,12 @@ sharedStorage:
   size: 10Gi
   accessModes:
     - ReadWriteMany
+  # Allowlist of group names to mount as shared directories.
+  # If empty, all groups from the user's Keycloak token are mounted.
+  # Groups are mounted at <mountPathPrefix>/<group> inside user pods.
+  groups: []
+  # Mount path prefix for shared group directories inside user pods.
+  mountPathPrefix: /shared
 
 # =============================================================================
 # Nebi Integration
@@ -104,6 +110,10 @@ jupyterhub:
     nebi-client-id: ""       # Nebi's Keycloak OIDC client ID
     jupyterhub-client-id: "" # JupyterHub's Keycloak OIDC client ID
     nebi-environment-selector: false  # Set true to show nebi workspaces in jhub-apps env dropdown
+    # Shared storage - set these to match top-level sharedStorage values.
+    shared-storage-enabled: false
+    shared-storage-groups: []       # allowlist; empty = all groups from token
+    shared-storage-mount-prefix: "/shared"
     # jhub-apps (JAppsConfig) overrides.
     # Any key here is set as an attribute on c.JAppsConfig before install_jhub_apps().
     # See https://jhub-apps.nebari.dev/docs/configuration for available options.
