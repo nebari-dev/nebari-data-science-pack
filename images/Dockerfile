@@ -138,21 +138,35 @@ RUN curl -fsSL "https://github.com/starship/starship/releases/download/v${STARSH
 RUN PATH="/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${PATH}" \
     /opt/scripts/install-fonts.sh "/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static"
 
-# Inject @font-face, preload, and font-load resize handler into index.html.
-# xterm.js uses Canvas rendering and won't pick up web fonts that load after
-# initialization. We preload the font (high priority), use font-display:block
-# (delays rendering until font loads), and trigger a window resize after
-# document.fonts.ready so xterm.js re-measures with the correct font.
+# Inject Nerd Font: @font-face in index.html + patch default terminal font
+# in JupyterLab's built JS. The settingregistry has version mismatches that
+# prevent font overrides from reaching xterm.js, so we patch the hardcoded
+# defaultOptions directly in the bundle.
+COPY terminal/nerd-font-loader.js /tmp/nerd-font-loader.js
 RUN /opt/scripts/inject-font.sh \
-    /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static/index.html
+    /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static/index.html \
+    /tmp/nerd-font-loader.js \
+    && rm /tmp/nerd-font-loader.js
+
+# Patch the hardcoded terminal defaultOptions in JupyterLab's JS bundle
+# to use Nerd Font instead of Menlo/Consolas
+RUN sed -i "s|fontFamily:'Menlo, Consolas, \"DejaVu Sans Mono\", monospace',fontSize:13,lineHeight:1|fontFamily:\"'FiraCode Nerd Font', 'Fira Code', monospace\",fontSize:14,lineHeight:1.2|" \
+    /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static/jlab_core.*.js
 
 # Shell configuration
 COPY terminal/bashrc /etc/skel/.bashrc
 COPY terminal/nebari-terminal.sh /etc/profile.d/nebari-terminal.sh
 COPY terminal/starship.toml /etc/starship.toml
 
-# JupyterLab settings overrides
+# JupyterLab settings overrides (schema defaults for theme)
 COPY terminal/overrides.json /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/settings/overrides.json
+
+# Terminal font as explicit user setting (NOT schema default).
+# overrides.json only changes schema defaults, but JupyterLab's Terminal widget
+# has hardcoded defaultOptions that take precedence over schema defaults.
+# Writing to /etc/skel ensures new users get these as actual user settings.
+RUN mkdir -p /etc/skel/.jupyter/lab/user-settings/@jupyterlab/terminal-extension
+COPY terminal/terminal-settings.json /etc/skel/.jupyter/lab/user-settings/@jupyterlab/terminal-extension/plugin.jupyterlab-settings
 
 COPY nebi/jupyter_server_config.py /usr/local/etc/jupyter/jupyter_server_config.py
 COPY nebi/icons /usr/local/etc/jupyter/icons

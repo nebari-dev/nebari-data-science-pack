@@ -24,5 +24,12 @@ unzip -q "${TMP_DIR}/FiraCode.zip" \
 cp "${TMP_DIR}/FiraCodeNerdFontMono-Regular.ttf" "${FONT_DIR}/"
 cp "${TMP_DIR}/FiraCodeNerdFontMono-Bold.ttf" "${FONT_DIR}/"
 
+# Also install as system font so Chromium's OffscreenCanvas can resolve it.
+# OffscreenCanvas uses the system font stack, not CSS @font-face.
+mkdir -p /usr/local/share/fonts/firacode-nerd
+cp "${TMP_DIR}/FiraCodeNerdFontMono-Regular.ttf" /usr/local/share/fonts/firacode-nerd/
+cp "${TMP_DIR}/FiraCodeNerdFontMono-Bold.ttf" /usr/local/share/fonts/firacode-nerd/
+fc-cache -f /usr/local/share/fonts/firacode-nerd
+
 rm -rf "${TMP_DIR}"
-echo "Fira Code Nerd Font installed to ${FONT_DIR}"
+echo "Fira Code Nerd Font installed to ${FONT_DIR} and /usr/local/share/fonts/"
