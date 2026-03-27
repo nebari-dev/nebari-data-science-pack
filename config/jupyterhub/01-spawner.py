@@ -196,6 +196,12 @@ async def _nebi_pre_spawn_hook(spawner):
     Nebi JWT, and injects it as NEBI_AUTH_TOKEN into the pod environment.
     Non-fatal: if any step fails, the pod still spawns without auto-auth.
     """
+    # Tell jhub-app-proxy to use pixi activation (instead of conda) for app pods.
+    # Set this first, before any early returns, because pixi activation is needed
+    # regardless of whether the token exchange succeeds — the nebi binary in the
+    # pod handles workspace pull and pixi env activation independently.
+    spawner.environment = {**spawner.environment, "JHUB_APP_ENV_MANAGER": "pixi"}
+
     auth_state = await spawner.user.get_auth_state()
     if not auth_state:
         log.warning("No auth_state for %s, skipping Nebi auto-auth", spawner.user.name)
