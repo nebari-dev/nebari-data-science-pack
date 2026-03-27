@@ -537,17 +537,17 @@ async def _nebi_pre_spawn_hook(spawner):
 # Shared storage hook helpers
 # ---------------------------------------------------------------------------
 
-def _get_user_groups(spawner, auth_state):
+def _get_user_groups(auth_state):
     """Extract and filter user groups from auth_state.
 
-    Returns groups from the Keycloak IdToken (set by EnvoyOIDCAuthenticator),
-    falling back to JupyterHub-managed groups. Applies the allowlist if configured.
+    Reads groups stored in auth_state by EnvoyOIDCAuthenticator (from Keycloak
+    IdToken groups claim). Applies the allowlist if configured.
+    Note: we do NOT fall back to spawner.user.groups because accessing the
+    SQLAlchemy relationship from an async pre_spawn_hook causes DetachedInstanceError.
     """
     groups = []
     if auth_state:
         groups = auth_state.get("groups", [])
-    if not groups:
-        groups = [g.name for g in spawner.user.groups]
     if shared_storage_groups_allowlist:
         groups = [g for g in groups if g in shared_storage_groups_allowlist]
     # Strip any leading slashes (Keycloak returns e.g. "/admin")
@@ -658,21 +658,26 @@ async def _pre_spawn_hook(spawner):
     auth_state = await spawner.user.get_auth_state()
     username = spawner.user.name
 
-    # 1. Nebi auto-auth (no-op when not configured)
+    # 1. Nebi auto-auth (non-fatal)
     if _nebi_auth_configured:
         await _nebi_pre_spawn_hook(spawner)
 
-    # 2. Always resolve groups — needed for both shared storage mounts and
-    #    local ~/shared/<group> dir creation in _setup_nss_wrapper
-    groups = _get_user_groups(spawner, auth_state)
+    # 2. Resolve groups from auth_state (stored by EnvoyOIDCAuthenticator)
+    groups = _get_user_groups(auth_state)
 
     # 3. Shared group directory PVC mounts (only when RWX PVC is configured)
     if shared_storage_enabled and groups:
-        await _setup_shared_storage(spawner, groups)
+        try:
+            await _setup_shared_storage(spawner, groups)
+        except Exception:
+            log.exception("Failed to set up shared storage for %s (pod will still spawn)", username)
 
-    # 4. NSS wrapper (always — makes whoami/id show the real username,
-    #    creates ~/shared/<group> dirs whether PVC-backed or local)
-    await _setup_nss_wrapper(spawner, username, groups)
+    # 4. NSS wrapper — always runs; wrapped independently so shared storage
+    #    failures don't prevent whoami/id from showing the real username
+    try:
+        await _setup_nss_wrapper(spawner, username, groups)
+    except Exception:
+        log.exception("Failed to set up NSS wrapper for %s", username)
 
 
 c.KubeSpawner.pre_spawn_hook = _pre_spawn_hook
