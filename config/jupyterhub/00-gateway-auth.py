@@ -34,27 +34,20 @@ class EnvoyOIDCAuthenticator(Authenticator):
 
     auto_login = True
 
+    # Re-read cookies every 60s so auth_state stays fresh.
+    # Envoy Gateway refreshes the AccessToken cookie automatically;
+    # this ensures JupyterHub's stored auth_state keeps up.
+    auth_refresh_age = 60
+
     def get_handlers(self, app):
         return [("/logout", EnvoyOIDCLogoutHandler)]
 
-    async def authenticate(self, handler, data=None):
-        # Envoy Gateway stores two tokens as cookies after OIDC authentication:
-        #
-        # IdToken (IdToken-<suffix>):
-        #   JWT containing user identity claims (sub, email, groups, etc.).
-        #   The `aud` claim is set to THIS client (JupyterHub's Keycloak client).
-        #   Used here to extract the username and groups.
-        #
-        # AccessToken (AccessToken-<suffix>):
-        #   Credential for accessing resources. Can be exchanged at Keycloak's
-        #   token endpoint (RFC 8693) for a token with a different audience —
-        #   e.g., exchanging a JupyterHub access token for a Nebi ID token.
-        #   Stored in auth_state for the spawner's pre_spawn_hook to use.
-        #
-        # RefreshToken (RefreshToken-<suffix>):
-        #   Long-lived token for obtaining fresh access tokens. Access tokens
-        #   expire in minutes, so the pre_spawn_hook uses the refresh token
-        #   to get a fresh access token before doing the exchange.
+    @staticmethod
+    def _extract_envoy_cookies(handler):
+        """Extract Envoy Gateway OIDC cookies from the request.
+
+        Returns (id_token, access_token, refresh_token) — any may be None.
+        """
         id_token = None
         access_token = None
         refresh_token = None
@@ -65,6 +58,25 @@ class EnvoyOIDCAuthenticator(Authenticator):
                 access_token = value.value
             elif name.startswith("RefreshToken"):
                 refresh_token = value.value
+        return id_token, access_token, refresh_token
+
+    async def authenticate(self, handler, data=None):
+        # Envoy Gateway stores tokens as cookies after OIDC authentication:
+        #
+        # IdToken (IdToken-<suffix>):
+        #   JWT with user identity claims (sub, email, groups).
+        #   Used here to extract the username and groups.
+        #
+        # AccessToken (AccessToken-<suffix>):
+        #   Short-lived credential (~5 min). Can be exchanged at Keycloak
+        #   for a token with a different audience (RFC 8693).
+        #   Stored in auth_state for the spawner and nebi env listing.
+        #
+        # RefreshToken (RefreshToken-<suffix>):
+        #   Envoy manages this internally (refreshToken: true in SecurityPolicy).
+        #   NOT forwarded to upstream — the cookie is typically absent here.
+        #   Envoy uses it to refresh the AccessToken cookie transparently.
+        id_token, access_token, refresh_token = self._extract_envoy_cookies(handler)
 
         if not id_token:
             self.log.warning("No IdToken cookie found")
@@ -105,6 +117,37 @@ class EnvoyOIDCAuthenticator(Authenticator):
                 }.items() if v is not None
             },
         }
+
+    async def refresh_user(self, user, handler=None):
+        """Re-read Envoy's OIDC cookies to keep auth_state fresh.
+
+        Envoy Gateway automatically refreshes the AccessToken cookie using
+        its internally managed refresh token.  By reading the fresh cookie
+        here, we update auth_state so downstream consumers (nebi token
+        exchange, spawner hooks) always have a valid access token.
+
+        Called by JupyterHub every `auth_refresh_age` seconds (60s).
+        """
+        if handler is None:
+            # No request context (e.g. internal API call) — can't read cookies
+            return True
+
+        id_token, access_token, refresh_token = self._extract_envoy_cookies(handler)
+
+        if not id_token:
+            # Cookies missing — session may have expired, force re-login
+            self.log.warning("refresh_user: no IdToken cookie for %s, invalidating session", user.name)
+            return False
+
+        auth_state = {
+            k: v for k, v in {
+                "id_token": id_token,
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+            }.items() if v is not None
+        }
+
+        return {"name": user.name, "auth_state": auth_state}
 
 
 if get_config("custom.external-url", ""):

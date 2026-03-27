@@ -1,6 +1,8 @@
 """jhub-apps integration configuration."""
 
 # ruff: noqa: F821 - `c` is a magic global provided by JupyterHub
+import os
+
 from kubespawner import KubeSpawner
 from jhub_apps import theme_template_paths, themes
 from jhub_apps.configuration import install_jhub_apps
@@ -32,3 +34,13 @@ for key, value in japps_config.items():
 
 # Install jhub-apps (sets up service, roles, etc.)
 c = install_jhub_apps(c, spawner_to_subclass=KubeSpawner)
+
+# Forward JUPYTERHUB_OIDC_CLIENT_SECRET to the jhub-apps subprocess so that
+# 03-nebi-envs.py (which is re-evaluated inside the subprocess via
+# get_jupyterhub_config()) can read it for Keycloak token exchange.
+_oidc_secret = os.environ.get("JUPYTERHUB_OIDC_CLIENT_SECRET", "")
+if _oidc_secret:
+    for svc in c.JupyterHub.services:
+        if svc.get("name") == "japps":
+            svc.setdefault("environment", {})["JUPYTERHUB_OIDC_CLIENT_SECRET"] = _oidc_secret
+            break
