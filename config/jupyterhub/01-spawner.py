@@ -323,6 +323,7 @@ async def _nebi_pre_spawn_hook(spawner):
                     f"echo 'WARNING: nebi pull {workspace_name} failed (app will start without workspace)'",
                 ],
                 "env": [
+                    {"name": "HOME", "value": "/home/jovyan"},
                     {"name": "NEBI_AUTH_TOKEN", "value": nebi_jwt},
                     {"name": "NEBI_REMOTE_URL", "value": nebi_remote},
                 ],
