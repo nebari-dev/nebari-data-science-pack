@@ -472,7 +472,8 @@ async def _nebi_pre_spawn_hook(spawner):
                     # `pixi run` doesn't hit the ready-check timeout.
                     f"mkdir -p {ws_dir} && "
                     f"nebi pull {workspace_name} -o {ws_dir} --force && "
-                    f"pixi install --manifest-path {ws_dir}/pixi.toml || "
+                    f"pixi install --manifest-path {ws_dir}/pixi.toml && "
+                    f"chmod -R a+rw {nebi_env_dir}/nebi.db* || "
                     f"echo 'WARNING: nebi pull or pixi install failed for {workspace_name}'",
                 ],
                 "env": [
