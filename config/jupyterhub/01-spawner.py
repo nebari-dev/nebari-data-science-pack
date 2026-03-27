@@ -587,16 +587,20 @@ async def _setup_shared_storage(spawner, groups):
     }]
 
 
-def _generate_nss_files(username, uid=1000, gid=100):
+def _generate_nss_files(username, uid=1000, gid=1000):
     """Generate /tmp/passwd and /tmp/group content for libnss_wrapper.
 
     Maps uid 1000 to the real username so whoami/id show the correct name.
     The home dir is /home/jovyan to match the actual PVC mount point.
+    gid=1000 matches the z2jh default securityContext (jovyan group).
     Additional supplemental GIDs suppress 'missing GID' warnings at startup.
     """
     passwd = f"{username}:x:{uid}:{gid}:{username}:/home/jovyan:/bin/bash"
     additional_gids = [4, 20, 24, 25, 27, 29, 30, 44, 46]
-    group_lines = [f"users:x:{gid}:"] + [f"nogroup{g}:x:{g}:" for g in additional_gids]
+    group_lines = [
+        f"jovyan:x:{gid}:",   # primary group — matches z2jh pod securityContext GID
+        "users:x:100:",        # supplemental group for shared directory access
+    ] + [f"nogroup{g}:x:{g}:" for g in additional_gids]
     return passwd, "\n".join(group_lines)
 
 
@@ -621,9 +625,11 @@ async def _setup_nss_wrapper(spawner, username, has_shared_groups):
         f"echo '{etc_group}' > /tmp/group",
     ]
     if has_shared_groups:
+        # Symlink ~/shared → the PVC mount prefix so all group dirs are reachable
         nss_cmds.append(f"ln -sfn {shared_storage_mount_prefix} /home/jovyan/shared")
     else:
-        nss_cmds.append("rm -f /home/jovyan/shared")
+        # No shared PVC — create an empty placeholder dir so ~/shared exists
+        nss_cmds.append("mkdir -p /home/jovyan/shared")
 
     spawner.lifecycle_hooks = {
         "postStart": {"exec": {"command": ["/bin/sh", "-c", " && ".join(nss_cmds)]}}
