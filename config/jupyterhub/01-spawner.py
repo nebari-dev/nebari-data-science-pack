@@ -447,8 +447,11 @@ async def _nebi_pre_spawn_hook(spawner):
                 "workingDir": "/home/jovyan",
                 "command": [
                     "/bin/sh", "-c",
-                    f"nebi pull {workspace_name} --force || "
-                    f"echo 'WARNING: nebi pull {workspace_name} failed (app will start without workspace)'",
+                    # Pull workspace files, then pre-install the pixi environment
+                    # so jhub-app-proxy's `pixi run` doesn't hit the install timeout.
+                    f"nebi pull {workspace_name} --force && "
+                    f"pixi install || "
+                    f"echo 'WARNING: nebi pull or pixi install failed for {workspace_name}'",
                 ],
                 "env": [
                     {"name": "HOME", "value": "/home/jovyan"},
