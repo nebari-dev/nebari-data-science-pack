@@ -4,139 +4,17 @@
 import json
 import logging
 import os
-import urllib.error
-import urllib.request
-from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from z2jh import get_config
 
 log = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _extract_error_body(exc):
-    """Extract HTTP response body from an exception for diagnostic logging.
-
-    urllib.error.HTTPError exposes the body via .read(); other exceptions
-    do not.  Returns an empty string if the body cannot be read.
-    """
-    if hasattr(exc, "read"):
-        try:
-            return exc.read().decode("utf-8", errors="replace")
-        except Exception:
-            pass
-    return ""
-
-
-# ---------------------------------------------------------------------------
-# Synchronous Keycloak token exchange helpers
-# ---------------------------------------------------------------------------
-# jhub-apps calls the conda_envs callable synchronously from its FastAPI
-# service, so we MUST use urllib.request (not async Tornado).
-# The token exchange logic mirrors 01-spawner.py but is synchronous.
-
-
-def _sync_refresh_access_token(refresh_token, keycloak_url, hub_client_id, hub_client_secret):
-    """Use the refresh token to get a fresh access token from Keycloak.
-
-    Returns the new access token string, or empty string on failure.
-    """
-    body = urlencode({
-        "grant_type": "refresh_token",
-        "refresh_token": refresh_token,
-        "client_id": hub_client_id,
-        "client_secret": hub_client_secret,
-    }).encode("utf-8")
-    req = Request(
-        keycloak_url,
-        data=body,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        method="POST",
-    )
-    try:
-        with urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-            return data.get("access_token", "")
-    except Exception as exc:
-        resp_body = _extract_error_body(exc)
-        log.error(
-            "nebi-envs: Keycloak token refresh failed: %s response=%s (url=%s, client_id=%s)",
-            exc, resp_body, keycloak_url, hub_client_id,
-        )
-        return ""
-
-
-def _sync_exchange_access_token_for_nebi_id_token(
-    access_token, keycloak_url, nebi_client_id, hub_client_id, hub_client_secret,
-):
-    """Exchange a JupyterHub access token for a Nebi-audience ID token via Keycloak.
-
-    Returns the Nebi ID token string, or empty string on failure.
-    """
-    body = urlencode({
-        "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
-        "subject_token": access_token,
-        "subject_token_type": "urn:ietf:params:oauth:token-type:access_token",
-        "audience": nebi_client_id,
-        "client_id": hub_client_id,
-        "client_secret": hub_client_secret,
-    }).encode("utf-8")
-    req = Request(
-        keycloak_url,
-        data=body,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        method="POST",
-    )
-    try:
-        with urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-            # Prefer id_token if present (has user identity claims), fall back to access_token
-            return data.get("id_token") or data.get("access_token", "")
-    except Exception as exc:
-        resp_body = _extract_error_body(exc)
-        log.error(
-            "nebi-envs: Keycloak token exchange failed: %s response=%s (url=%s, audience=%s, client_id=%s)",
-            exc, resp_body, keycloak_url, nebi_client_id, hub_client_id,
-        )
-        return ""
-
-
-class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Prevent urllib from following redirects (matches async follow_redirects=False)."""
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise urllib.error.HTTPError(newurl, code, msg, headers, fp)
-
-
-def _sync_exchange_nebi_id_token_for_jwt(nebi_id_token, nebi_internal_url):
-    """Exchange a Nebi-audience ID token for a Nebi JWT via the session endpoint.
-
-    Uses a no-redirect opener to match the async version's follow_redirects=False.
-    Returns the Nebi JWT string, or empty string on failure.
-    """
-    session_url = f"{nebi_internal_url.rstrip('/')}/api/v1/auth/session"
-    req = Request(
-        session_url,
-        headers={"Cookie": f"IdToken={nebi_id_token}"},
-        method="GET",
-    )
-    opener = urllib.request.build_opener(_NoRedirectHandler)
-    try:
-        with opener.open(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-            return data.get("token", "")
-    except Exception as exc:
-        resp_body = _extract_error_body(exc)
-        log.error(
-            "nebi-envs: Nebi session exchange failed: %s response=%s (url=%s)",
-            exc, resp_body, session_url,
-        )
-        return ""
+# Token exchange functions (_extract_error_body, _sync_refresh_access_token,
+# _sync_exchange_access_token_for_nebi_id_token,
+# _sync_exchange_nebi_id_token_for_jwt, get_nebi_jwt) are defined in
+# 01-spawner.py which loads first.  JupyterHub executes config files in the
+# same namespace, so they are available here as globals.
 
 
 # ---------------------------------------------------------------------------
@@ -196,36 +74,16 @@ def get_nebi_environments(user):
         return []
 
     try:
-        # Step 1: Refresh the access token (preferred) or use existing one
-        if refresh_token:
-            access_token = _sync_refresh_access_token(
-                refresh_token, keycloak_url, hub_cid, hub_secret,
-            )
-            if not access_token:
-                log.warning(
-                    "nebi-envs: token refresh returned no access token for %s", username,
-                )
-                return []
-
-        # Step 2: Exchange access token for Nebi-audience ID token
-        nebi_id_token = _sync_exchange_access_token_for_nebi_id_token(
-            access_token, keycloak_url, nebi_cid, hub_cid, hub_secret,
+        # Reuse the shared token exchange from 01-spawner.py
+        nebi_jwt = get_nebi_jwt(
+            refresh_token, access_token,
+            keycloak_url, nebi_cid, hub_cid, hub_secret, nebi_url,
         )
-        if not nebi_id_token:
-            log.warning(
-                "nebi-envs: Keycloak token exchange returned no token for %s", username,
-            )
-            return []
-
-        # Step 3: Exchange Nebi ID token for Nebi JWT
-        nebi_jwt = _sync_exchange_nebi_id_token_for_jwt(nebi_id_token, nebi_url)
         if not nebi_jwt:
-            log.warning(
-                "nebi-envs: Nebi session returned no JWT for %s", username,
-            )
+            log.warning("nebi-envs: token exchange returned no JWT for %s", username)
             return []
 
-        # Step 4: Fetch workspaces from Nebi API
+        # Fetch workspaces from Nebi API
         workspaces_url = f"{nebi_url.rstrip('/')}/api/v1/workspaces"
         req = Request(
             workspaces_url,
@@ -242,7 +100,7 @@ def get_nebi_environments(user):
             )
             return []
 
-        # Step 5: Validate response shape and filter to ready workspaces
+        # Validate response shape and filter to ready workspaces
         if not isinstance(workspaces, list):
             log.error(
                 "nebi-envs: unexpected workspaces response type %s for %s (expected list)",
