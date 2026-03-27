@@ -4,6 +4,8 @@
 import json
 import logging
 import os
+import time
+import threading
 from urllib.request import Request, urlopen
 
 from z2jh import get_config
@@ -15,6 +17,37 @@ log = logging.getLogger(__name__)
 # _sync_exchange_nebi_id_token_for_jwt, get_nebi_jwt) are defined in
 # 01-spawner.py which loads first.  JupyterHub executes config files in the
 # same namespace, so they are available here as globals.
+
+
+# ---------------------------------------------------------------------------
+# Per-user cache for nebi JWT + workspace list
+# ---------------------------------------------------------------------------
+# The nebi JWT has a 24h lifetime.  Rather than doing the full 3-step token
+# exchange on every /conda-environments/ request (which jhub-apps fires on
+# every page load), cache the result per user.
+#
+# Cache entry: (nebi_jwt, workspace_list, expiry_timestamp)
+# TTL: 10 minutes — short enough to pick up new workspaces reasonably fast,
+#       long enough to avoid hammering Keycloak on every page load.
+
+_CACHE_TTL_SECONDS = 600  # 10 minutes
+_cache = {}  # username -> (nebi_jwt, workspace_list, expiry_timestamp)
+_cache_lock = threading.Lock()
+
+
+def _cache_get(username):
+    """Return cached (nebi_jwt, workspace_list) if still valid, else None."""
+    with _cache_lock:
+        entry = _cache.get(username)
+        if entry and entry[2] > time.time():
+            return entry[0], entry[1]
+        return None
+
+
+def _cache_set(username, nebi_jwt, workspace_list):
+    """Store (nebi_jwt, workspace_list) in cache with TTL."""
+    with _cache_lock:
+        _cache[username] = (nebi_jwt, workspace_list, time.time() + _CACHE_TTL_SECONDS)
 
 
 # ---------------------------------------------------------------------------
@@ -31,6 +64,13 @@ def get_nebi_environments(user):
     On any failure, returns an empty list (graceful degradation).
     """
     username = user.get("name", "<unknown>")
+
+    # Check cache first — avoids the 3-step token exchange on every page load
+    cached = _cache_get(username)
+    if cached is not None:
+        _, workspace_list = cached
+        log.info("nebi-envs: returning %d cached environments for %s", len(workspace_list), username)
+        return workspace_list
 
     # Read config values
     keycloak_url = get_config("custom.keycloak-token-url", "")
@@ -155,9 +195,10 @@ def get_nebi_environments(user):
             if owner_username and ws_name:
                 envs.append(f"{owner_username}/{ws_name}")
 
+        _cache_set(username, nebi_jwt, envs)
         log.info(
-            "nebi-envs: listed %d ready environments for %s (total workspaces: %d)",
-            len(envs), username, len(workspaces),
+            "nebi-envs: listed %d ready environments for %s (total workspaces: %d, cached for %ds)",
+            len(envs), username, len(workspaces), _CACHE_TTL_SECONDS,
         )
         return envs
 
