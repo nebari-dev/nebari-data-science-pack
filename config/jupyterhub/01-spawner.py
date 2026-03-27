@@ -431,36 +431,59 @@ async def _nebi_pre_spawn_hook(spawner):
         log.info("Nebi auto-auth succeeded for %s", spawner.user.name)
 
         # If a nebi workspace is selected (via jhub-apps environment selector),
-        # add an init container to pull it before the app starts.
+        # add an init container to pull it into an ephemeral volume.
+        # Each app pod gets its own emptyDir at /tmp/nebi-env so multiple apps
+        # don't overwrite each other's workspace files on the shared user PVC.
         conda_env = getattr(spawner, "user_options", {}).get("conda_env", "")
         if conda_env:
-            # conda_env may be "owner/workspace-name" or just "workspace-name"
             workspace_name = conda_env.rsplit("/", 1)[-1] if "/" in conda_env else conda_env
             nebi_remote = get_config("custom.nebi-remote-url", "")
+            nebi_env_dir = "/tmp/nebi-env"
+            ws_dir = f"{nebi_env_dir}/workspace"
             log.info(
                 "Adding nebi-pull init container for workspace %s (user %s)",
                 workspace_name, spawner.user.name,
             )
+
+            # Add ephemeral volume for this pod's workspace files + nebi DB
+            spawner.volumes = list(spawner.volumes) + [{
+                "name": "nebi-env",
+                "emptyDir": {},
+            }]
+            # Mount in main container so nebi workspace list + pixi run can find it
+            spawner.volume_mounts = list(spawner.volume_mounts) + [{
+                "name": "nebi-env",
+                "mountPath": nebi_env_dir,
+            }]
+            # Tell nebi in the main container to use the ephemeral DB
+            spawner.environment = {
+                **spawner.environment,
+                "NEBI_DATA_DIR": nebi_env_dir,
+            }
+
             spawner.init_containers = list(spawner.init_containers) + [{
                 "name": "nebi-pull",
                 "image": spawner.image,
-                "workingDir": "/home/jovyan",
+                "workingDir": ws_dir,
                 "command": [
                     "/bin/sh", "-c",
-                    # Pull workspace files, then pre-install the pixi environment
-                    # so jhub-app-proxy's `pixi run` doesn't hit the install timeout.
-                    f"nebi pull {workspace_name} --force && "
-                    f"pixi install || "
+                    # Pull workspace files into the ephemeral dir, then
+                    # pre-install the pixi environment so jhub-app-proxy's
+                    # `pixi run` doesn't hit the ready-check timeout.
+                    f"mkdir -p {ws_dir} && "
+                    f"nebi pull {workspace_name} -o {ws_dir} --force && "
+                    f"pixi install --manifest-path {ws_dir}/pixi.toml || "
                     f"echo 'WARNING: nebi pull or pixi install failed for {workspace_name}'",
                 ],
                 "env": [
-                    {"name": "HOME", "value": "/home/jovyan"},
+                    {"name": "HOME", "value": nebi_env_dir},
+                    {"name": "NEBI_DATA_DIR", "value": nebi_env_dir},
                     {"name": "NEBI_AUTH_TOKEN", "value": nebi_jwt},
                     {"name": "NEBI_REMOTE_URL", "value": nebi_remote},
                 ],
                 "volumeMounts": [
                     {"name": "nebi-bin", "mountPath": "/usr/local/bin/nebi", "subPath": "nebi"},
-                    {"name": "home", "mountPath": "/home/jovyan"},
+                    {"name": "nebi-env", "mountPath": nebi_env_dir},
                 ],
             }]
     except Exception:
