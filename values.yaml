@@ -83,6 +83,14 @@ sharedStorage:
     # Deploy a DaemonSet that installs nfs-common on every node.
     # Required on k3s/minimal OS nodes that ship without NFS client tools.
     installClient: false
+    # Pin the NFS server pod to specific nodes to avoid slow RWO PVC reattachment
+    # when the pod reschedules (detach + reattach can take 30-120s on some providers).
+    # Example for Hetzner worker nodes:
+    #   nodeSelector:
+    #     node.kubernetes.io/instance-type: cpx31
+    nodeSelector: {}
+    # Advanced: full nodeAffinity spec (overrides nodeSelector if both set)
+    nodeAffinity: {}
 
 # =============================================================================
 # Nebi Integration
@@ -128,7 +136,8 @@ jupyterhub:
     nebi-client-id: ""       # Nebi's Keycloak OIDC client ID
     jupyterhub-client-id: "" # JupyterHub's Keycloak OIDC client ID
     nebi-environment-selector: false  # Set true to show nebi workspaces in jhub-apps env dropdown
-    # Shared storage - set these to match top-level sharedStorage values.
+    # Shared storage — MUST match top-level sharedStorage.* values exactly.
+    # helm template will fail if sharedStorage.enabled and shared-storage-enabled diverge.
     shared-storage-enabled: false
     shared-storage-groups: []       # allowlist; empty = all groups from token
     shared-storage-mount-prefix: "/shared"

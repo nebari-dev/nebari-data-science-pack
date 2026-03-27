@@ -1,3 +1,4 @@
+{{- include "nebari-data-science-pack.validateSharedStorage" . }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

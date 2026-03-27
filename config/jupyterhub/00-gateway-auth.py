@@ -93,17 +93,27 @@ class EnvoyOIDCAuthenticator(Authenticator):
 
         username = claims.get("preferred_username") or claims.get("sub")
         if not username:
-            self.log.warning("No username claim in IdToken: %s", list(claims.keys()))
+            self.log.warning("authenticate: no username claim in IdToken: %s", list(claims.keys()))
             return None
 
         # Extract groups from the token (set by the "groups" scope / group mapper)
         groups = claims.get("groups", [])
+        if not groups:
+            self.log.warning(
+                "authenticate: no groups claim in IdToken for %s "
+                "(check Keycloak client scope / group mapper configuration)",
+                username,
+            )
         # Keycloak returns groups as paths (e.g. "/admin"), strip leading slash
         groups = [g.strip("/") for g in groups]
 
         # Determine admin from group membership
         admin_groups = set(get_config("custom.admin-groups", ["admin"]))
         is_admin = bool(admin_groups & set(groups))
+        self.log.info(
+            "authenticate: user=%s groups=%s is_admin=%s",
+            username, groups, is_admin,
+        )
 
         return {
             "name": username,
@@ -131,13 +141,17 @@ class EnvoyOIDCAuthenticator(Authenticator):
         """
         if handler is None:
             # No request context (e.g. internal API call) — can't read cookies
+            self.log.debug("refresh_user: no handler for %s (internal call), returning True", user.name)
             return True
 
         id_token, access_token, refresh_token = self._extract_envoy_cookies(handler)
 
         if not id_token:
             # Cookies missing — session may have expired, force re-login
-            self.log.warning("refresh_user: no IdToken cookie for %s, invalidating session", user.name)
+            self.log.warning(
+                "refresh_user: no IdToken cookie for %s — session likely expired, forcing re-login",
+                user.name,
+            )
             return False
 
         # Re-parse groups from the refreshed IdToken so auth_state stays current
@@ -146,7 +160,14 @@ class EnvoyOIDCAuthenticator(Authenticator):
             payload_b64 += "=" * (4 - len(payload_b64) % 4)
             claims = json.loads(base64.urlsafe_b64decode(payload_b64))
             groups = [g.strip("/") for g in claims.get("groups", [])]
+            self.log.debug("refresh_user: refreshed groups for %s: %s", user.name, groups)
         except Exception:
+            self.log.warning(
+                "refresh_user: failed to parse groups from IdToken for %s "
+                "— auth_state will have empty groups until next full login",
+                user.name,
+                exc_info=True,
+            )
             groups = []
 
         auth_state = {
@@ -158,6 +179,10 @@ class EnvoyOIDCAuthenticator(Authenticator):
             }.items() if v is not None
         }
 
+        self.log.debug(
+            "refresh_user: auth_state refreshed for %s (access_token=%s, groups=%s)",
+            user.name, bool(access_token), groups,
+        )
         return {"name": user.name, "auth_state": auth_state}
 
 

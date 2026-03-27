@@ -64,6 +64,15 @@ spec:
         app.kubernetes.io/component: nfs-server
         {{- include "nebari-data-science-pack.selectorLabels" . | nindent 8 }}
     spec:
+      {{- if .Values.sharedStorage.nfsServer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.sharedStorage.nfsServer.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.sharedStorage.nfsServer.nodeAffinity }}
+      affinity:
+        nodeAffinity:
+          {{- toYaml .Values.sharedStorage.nfsServer.nodeAffinity | nindent 10 }}
+      {{- end }}
       containers:
         - name: nfs-server
           image: {{ .Values.sharedStorage.nfsServer.image.repository }}:{{ .Values.sharedStorage.nfsServer.image.tag }}

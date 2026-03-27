@@ -7,6 +7,7 @@ import logging
 import os
 import urllib.error
 import urllib.request
+from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -89,6 +90,15 @@ if shared_storage_enabled:
         "name": "shared",
         "persistentVolumeClaim": {"claimName": "shared-storage"},
     })
+
+# GID 100 (users group) as the fsGroup for all singleuser pods.
+# Kubernetes applies this as securityContext.fsGroup, which:
+#   1. Adds GID 100 as a supplemental group for the process
+#   2. chgrp -R 100 on all mounted volumes at pod start
+# This ensures shared dirs (created by init container as root:root) become
+# root:100, making them writable by users who have GID 100. Without this
+# being explicit, the behavior relies silently on the z2jh subchart default.
+c.KubeSpawner.fs_gid = 100
 
 
 # ---------------------------------------------------------------------------
@@ -542,33 +552,67 @@ def _get_user_groups(auth_state):
 
     Reads groups stored in auth_state by EnvoyOIDCAuthenticator (from Keycloak
     IdToken groups claim). Applies the allowlist if configured.
-    Note: we do NOT fall back to spawner.user.groups because accessing the
-    SQLAlchemy relationship from an async pre_spawn_hook causes DetachedInstanceError.
+    Uses Path(g).name (last component) like classic Nebari so /projects/myproj → myproj.
+    Deduplicates to prevent duplicate mountPath entries in the pod spec.
+    Note: does NOT fall back to spawner.user.groups — accessing that SQLAlchemy
+    relationship from an async hook causes DetachedInstanceError.
     """
-    groups = []
+    raw_groups = []
     if auth_state:
-        groups = auth_state.get("groups", [])
+        raw_groups = auth_state.get("groups", [])
+        log.debug("shared-storage: raw groups from auth_state: %s", raw_groups)
+    else:
+        log.debug("shared-storage: no auth_state (DummyAuthenticator?), groups will be empty")
+
     if shared_storage_groups_allowlist:
-        groups = [g for g in groups if g in shared_storage_groups_allowlist]
-    # Strip any leading slashes (Keycloak returns e.g. "/admin")
-    return [g.strip("/") for g in groups if g]
+        before = raw_groups
+        raw_groups = [g for g in raw_groups if g in shared_storage_groups_allowlist]
+        log.debug(
+            "shared-storage: allowlist %s filtered %s → %s",
+            shared_storage_groups_allowlist, before, raw_groups,
+        )
+
+    seen = set()
+    result = []
+    for g in raw_groups:
+        name = Path(g).name
+        if not name:
+            log.debug("shared-storage: skipping empty group name from %r", g)
+            continue
+        if name in seen:
+            log.debug("shared-storage: deduplicating group %r (already have it)", name)
+            continue
+        seen.add(name)
+        result.append(name)
+
+    log.info("shared-storage: resolved groups for user: %s", result)
+    return result
 
 
 async def _setup_shared_storage(spawner, groups):
     """Add per-group volume mounts and a single init container for shared directories.
 
-    Creates /shared/<group> on the PVC (chmod 2775 so new files inherit the
-    group and are group-writable with NB_UMASK=0002).
+    Creates /shared/<group> on the PVC with:
+    - chown 0:100 so group owner is GID 100 (users), matching pod fs_gid
+    - chmod 2775 (rwxrwsr-x) so group has write and setgid propagates GID to new files
+    Combined with NB_UMASK=0002, new files are group-writable (664/775).
     """
+    log.info(
+        "shared-storage: setting up PVC mounts for user %s, groups: %s",
+        spawner.user.name, groups,
+    )
     for group in groups:
         spawner.volume_mounts = list(spawner.volume_mounts) + [{
             "mountPath": f"{shared_storage_mount_prefix}/{group}",
             "name": "shared",
             "subPath": f"shared/{group}",
         }]
+        log.debug("shared-storage: added volume mount for group %r", group)
 
+    # chown 0:100 sets GID 100 (users group) as owner, matching the pod's fs_gid=100.
+    # chmod 2775: group has rwx + setgid bit so new files inherit GID 100.
     mkdir_cmds = " && ".join([
-        f"mkdir -p /mnt/shared/{g} && chmod 2775 /mnt/shared/{g}"
+        f"mkdir -p /mnt/shared/{g} && chown 0:100 /mnt/shared/{g} && chmod 2775 /mnt/shared/{g}"
         for g in groups
     ])
     spawner.init_containers = list(spawner.init_containers) + [{
@@ -585,21 +629,26 @@ async def _setup_shared_storage(spawner, groups):
             for g in groups
         ],
     }]
+    log.info(
+        "shared-storage: added initialize-shared-mounts init container for groups: %s",
+        groups,
+    )
 
 
 def _generate_nss_files(username, uid=1000, gid=1000):
     """Generate /tmp/passwd and /tmp/group content for libnss_wrapper.
 
     Maps uid 1000 to the real username so whoami/id show the correct name.
-    The home dir is /home/jovyan to match the actual PVC mount point.
-    gid=1000 matches the z2jh default securityContext (jovyan group).
+    Home dir is /home/jovyan to match the actual PVC mount point.
+    GID 1000 (jovyan) matches the pod's primary GID from the container image.
+    GID 100 (users) is included as a supplemental group for shared dir access.
     Additional supplemental GIDs suppress 'missing GID' warnings at startup.
     """
     passwd = f"{username}:x:{uid}:{gid}:{username}:/home/jovyan:/bin/bash"
     additional_gids = [4, 20, 24, 25, 27, 29, 30, 44, 46]
     group_lines = [
-        f"jovyan:x:{gid}:",   # primary group — matches z2jh pod securityContext GID
-        "users:x:100:",        # supplemental group for shared directory access
+        f"jovyan:x:{gid}:",    # primary group — matches pod securityContext GID 1000
+        "users:x:100:",         # supplemental — needed for shared dir write access
     ] + [f"nogroup{g}:x:{g}:" for g in additional_gids]
     return passwd, "\n".join(group_lines)
 
@@ -607,13 +656,22 @@ def _generate_nss_files(username, uid=1000, gid=1000):
 async def _setup_nss_wrapper(spawner, username, groups):
     """Configure libnss_wrapper so whoami/id report the real username.
 
-    Sets LD_PRELOAD and NB_UMASK, then adds a postStart lifecycle hook that:
-    - writes /tmp/passwd and /tmp/group
+    Sets LD_PRELOAD, NSS_WRAPPER_* paths, and NB_UMASK=0002.
+    Adds a postStart lifecycle hook that:
+    - writes /tmp/passwd and /tmp/group using printf (safe for special chars in username)
     - when shared PVC is enabled: symlinks ~/shared → PVC mount prefix
     - when shared PVC is disabled: creates local ~/shared/<group> dirs so
       users can see their group directories (not cross-user shared, but visible)
+    Merges into existing lifecycle_hooks to avoid overwriting hooks set elsewhere.
     """
+    log.info(
+        "nss-wrapper: configuring for user %s (groups=%s, shared_storage=%s)",
+        username, groups, shared_storage_enabled,
+    )
+
     etc_passwd, etc_group = _generate_nss_files(username)
+    log.debug("nss-wrapper: passwd entry: %s", etc_passwd)
+
     spawner.environment = {
         **spawner.environment,
         "LD_PRELOAD": "libnss_wrapper.so",
@@ -621,26 +679,40 @@ async def _setup_nss_wrapper(spawner, username, groups):
         "NSS_WRAPPER_GROUP": "/tmp/group",
         "NB_UMASK": "0002",
     }
+    log.debug("nss-wrapper: LD_PRELOAD and NSS_WRAPPER_* set in spawner environment")
 
+    # Use printf instead of echo '...' to safely handle special characters in
+    # usernames (e.g. '@', colons) without shell quoting issues.
     nss_cmds = [
-        f"echo '{etc_passwd}' > /tmp/passwd",
-        f"echo '{etc_group}' > /tmp/group",
+        f"printf '%s\\n' {etc_passwd!r} > /tmp/passwd",
+        f"printf '%s\\n' {etc_group!r} > /tmp/group",
     ]
 
     if groups and shared_storage_enabled:
-        # Symlink ~/shared → the PVC mount prefix so all group dirs are reachable
+        log.debug("nss-wrapper: symlinking ~/shared → %s (PVC-backed)", shared_storage_mount_prefix)
         nss_cmds.append(f"ln -sfn {shared_storage_mount_prefix} /home/jovyan/shared")
     elif groups:
-        # No shared PVC — create local per-group dirs under ~/shared
+        log.debug("nss-wrapper: creating local ~/shared/<group> dirs (no PVC): %s", groups)
         nss_cmds.append("mkdir -p /home/jovyan/shared")
         for group in groups:
             nss_cmds.append(f"mkdir -p /home/jovyan/shared/{group}")
     else:
+        log.debug("nss-wrapper: no groups — creating empty ~/shared dir")
         nss_cmds.append("mkdir -p /home/jovyan/shared")
 
+    # Merge into existing lifecycle_hooks rather than replacing, so other
+    # hooks (e.g. from future jhub-apps versions) are not silently overwritten.
+    existing = dict(getattr(spawner, "lifecycle_hooks", None) or {})
+    if "postStart" in existing:
+        log.warning(
+            "nss-wrapper: existing postStart lifecycle hook found for %s — overwriting",
+            username,
+        )
     spawner.lifecycle_hooks = {
-        "postStart": {"exec": {"command": ["/bin/sh", "-c", " && ".join(nss_cmds)]}}
+        **existing,
+        "postStart": {"exec": {"command": ["/bin/sh", "-c", " && ".join(nss_cmds)]}},
     }
+    log.info("nss-wrapper: postStart lifecycle hook registered for %s", username)
 
 
 # ---------------------------------------------------------------------------
@@ -651,33 +723,64 @@ async def _setup_nss_wrapper(spawner, username, groups):
 # The orchestrator always runs so NSS wrapper is active even without Nebi/shared.
 
 _nebi_auth_configured = bool(nebi_remote_url and get_config("custom.nebi-internal-url", ""))
+log.info(
+    "pre-spawn: Nebi auth configured=%s, shared storage enabled=%s, mount prefix=%s",
+    _nebi_auth_configured, shared_storage_enabled, shared_storage_mount_prefix,
+)
 
 
 async def _pre_spawn_hook(spawner):
     """Orchestrate all pre-spawn setup: Nebi auth, shared storage, NSS wrapper."""
-    auth_state = await spawner.user.get_auth_state()
     username = spawner.user.name
+    log.info("pre-spawn: starting hook for user %s", username)
+
+    auth_state = await spawner.user.get_auth_state()
+    if not auth_state:
+        log.warning("pre-spawn: no auth_state for %s (DummyAuthenticator or auth state disabled)", username)
+    else:
+        log.debug("pre-spawn: auth_state keys for %s: %s", username, list(auth_state.keys()))
 
     # 1. Nebi auto-auth (non-fatal)
     if _nebi_auth_configured:
+        log.debug("pre-spawn: running Nebi auto-auth for %s", username)
         await _nebi_pre_spawn_hook(spawner)
+    else:
+        log.debug("pre-spawn: Nebi auto-auth not configured, skipping")
 
     # 2. Resolve groups from auth_state (stored by EnvoyOIDCAuthenticator)
     groups = _get_user_groups(auth_state)
+    log.info("pre-spawn: user %s resolved groups: %s", username, groups)
 
     # 3. Shared group directory PVC mounts (only when RWX PVC is configured)
-    if shared_storage_enabled and groups:
-        try:
-            await _setup_shared_storage(spawner, groups)
-        except Exception:
-            log.exception("Failed to set up shared storage for %s (pod will still spawn)", username)
+    if shared_storage_enabled:
+        if groups:
+            log.info("pre-spawn: setting up shared storage mounts for %s", username)
+            try:
+                await _setup_shared_storage(spawner, groups)
+                log.info("pre-spawn: shared storage mounts configured for %s", username)
+            except Exception:
+                log.exception(
+                    "pre-spawn: shared storage setup FAILED for %s (pod will still spawn)",
+                    username,
+                )
+        else:
+            log.info(
+                "pre-spawn: shared storage enabled but user %s has no groups — skipping PVC mounts",
+                username,
+            )
+    else:
+        log.debug("pre-spawn: shared storage disabled, skipping PVC mounts for %s", username)
 
-    # 4. NSS wrapper — always runs; wrapped independently so shared storage
-    #    failures don't prevent whoami/id from showing the real username
+    # 4. NSS wrapper — always runs; independently guarded so shared storage
+    #    failures never prevent whoami/id from showing the real username
+    log.debug("pre-spawn: running NSS wrapper setup for %s", username)
     try:
         await _setup_nss_wrapper(spawner, username, groups)
+        log.info("pre-spawn: NSS wrapper configured for %s", username)
     except Exception:
-        log.exception("Failed to set up NSS wrapper for %s", username)
+        log.exception("pre-spawn: NSS wrapper setup FAILED for %s", username)
+
+    log.info("pre-spawn: hook complete for user %s", username)
 
 
 c.KubeSpawner.pre_spawn_hook = _pre_spawn_hook

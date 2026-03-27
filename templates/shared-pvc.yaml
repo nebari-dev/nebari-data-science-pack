@@ -8,6 +8,10 @@ metadata:
   name: {{ include "nebari-data-science-pack.fullname" . }}-nfs-share
   labels:
     {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+  annotations:
+    # Never delete this StorageClass during ArgoCD sync — deleting it unbinds the
+    # shared-storage PVC and disrupts all user pods until manually recreated.
+    argocd.argoproj.io/sync-options: Prune=false
 provisioner: kubernetes.io/no-provisioner
 volumeBindingMode: Immediate
 ---
@@ -20,6 +24,11 @@ metadata:
   name: {{ include "nebari-data-science-pack.fullname" . }}-nfs-share
   labels:
     {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+  annotations:
+    # Never delete this PV during ArgoCD sync — deletion unbinds the PVC and
+    # disrupts all user pods. Data on the backing NFS PVC is NOT lost (Retain
+    # policy) but the platform is down until the PV is manually recreated.
+    argocd.argoproj.io/sync-options: Prune=false
 spec:
   capacity:
     storage: {{ .Values.sharedStorage.size }}
