@@ -398,6 +398,7 @@ async def _nebi_pre_spawn_hook(spawner):
             spawner.init_containers = list(spawner.init_containers) + [{
                 "name": "nebi-pull",
                 "image": spawner.image,
+                "workingDir": "/home/jovyan",
                 "command": [
                     "/bin/sh", "-c",
                     f"nebi pull {workspace_name} --force || "
