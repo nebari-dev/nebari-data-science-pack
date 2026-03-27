@@ -604,12 +604,14 @@ def _generate_nss_files(username, uid=1000, gid=1000):
     return passwd, "\n".join(group_lines)
 
 
-async def _setup_nss_wrapper(spawner, username, has_shared_groups):
+async def _setup_nss_wrapper(spawner, username, groups):
     """Configure libnss_wrapper so whoami/id report the real username.
 
-    Sets LD_PRELOAD and NB_UMASK, then adds a postStart lifecycle hook that
-    writes /tmp/passwd and /tmp/group and creates (or removes) the
-    /home/jovyan/shared symlink depending on whether the user has shared dirs.
+    Sets LD_PRELOAD and NB_UMASK, then adds a postStart lifecycle hook that:
+    - writes /tmp/passwd and /tmp/group
+    - when shared PVC is enabled: symlinks ~/shared → PVC mount prefix
+    - when shared PVC is disabled: creates local ~/shared/<group> dirs so
+      users can see their group directories (not cross-user shared, but visible)
     """
     etc_passwd, etc_group = _generate_nss_files(username)
     spawner.environment = {
@@ -624,11 +626,16 @@ async def _setup_nss_wrapper(spawner, username, has_shared_groups):
         f"echo '{etc_passwd}' > /tmp/passwd",
         f"echo '{etc_group}' > /tmp/group",
     ]
-    if has_shared_groups:
+
+    if groups and shared_storage_enabled:
         # Symlink ~/shared → the PVC mount prefix so all group dirs are reachable
         nss_cmds.append(f"ln -sfn {shared_storage_mount_prefix} /home/jovyan/shared")
+    elif groups:
+        # No shared PVC — create local per-group dirs under ~/shared
+        nss_cmds.append("mkdir -p /home/jovyan/shared")
+        for group in groups:
+            nss_cmds.append(f"mkdir -p /home/jovyan/shared/{group}")
     else:
-        # No shared PVC — create an empty placeholder dir so ~/shared exists
         nss_cmds.append("mkdir -p /home/jovyan/shared")
 
     spawner.lifecycle_hooks = {
@@ -655,15 +662,17 @@ async def _pre_spawn_hook(spawner):
     if _nebi_auth_configured:
         await _nebi_pre_spawn_hook(spawner)
 
-    # 2. Shared group directory mounts
-    groups = []
-    if shared_storage_enabled:
-        groups = _get_user_groups(spawner, auth_state)
-        if groups:
-            await _setup_shared_storage(spawner, groups)
+    # 2. Always resolve groups — needed for both shared storage mounts and
+    #    local ~/shared/<group> dir creation in _setup_nss_wrapper
+    groups = _get_user_groups(spawner, auth_state)
 
-    # 3. NSS wrapper (always — makes whoami/id show the real username)
-    await _setup_nss_wrapper(spawner, username, bool(groups))
+    # 3. Shared group directory PVC mounts (only when RWX PVC is configured)
+    if shared_storage_enabled and groups:
+        await _setup_shared_storage(spawner, groups)
+
+    # 4. NSS wrapper (always — makes whoami/id show the real username,
+    #    creates ~/shared/<group> dirs whether PVC-backed or local)
+    await _setup_nss_wrapper(spawner, username, groups)
 
 
 c.KubeSpawner.pre_spawn_hook = _pre_spawn_hook

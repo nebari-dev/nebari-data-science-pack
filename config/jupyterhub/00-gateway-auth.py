@@ -114,6 +114,7 @@ class EnvoyOIDCAuthenticator(Authenticator):
                     "id_token": id_token,
                     "access_token": access_token,
                     "refresh_token": refresh_token,
+                    "groups": groups,  # stored so spawner can read at spawn time
                 }.items() if v is not None
             },
         }
@@ -139,11 +140,21 @@ class EnvoyOIDCAuthenticator(Authenticator):
             self.log.warning("refresh_user: no IdToken cookie for %s, invalidating session", user.name)
             return False
 
+        # Re-parse groups from the refreshed IdToken so auth_state stays current
+        try:
+            payload_b64 = id_token.split(".")[1]
+            payload_b64 += "=" * (4 - len(payload_b64) % 4)
+            claims = json.loads(base64.urlsafe_b64decode(payload_b64))
+            groups = [g.strip("/") for g in claims.get("groups", [])]
+        except Exception:
+            groups = []
+
         auth_state = {
             k: v for k, v in {
                 "id_token": id_token,
                 "access_token": access_token,
                 "refresh_token": refresh_token,
+                "groups": groups,
             }.items() if v is not None
         }
 
