@@ -52,19 +52,34 @@ nebariapp:
       intervalSeconds: 30
       timeoutSeconds: 5
 
-# Shared storage configuration (disabled - requires RWX storage class)
+# Shared storage — per-group directories mounted at /shared/<group> in user pods.
+# Requires an RWX volume so all user pods can mount it simultaneously.
+# Use nfsServer.enabled=true (below) for an in-cluster NFS solution that works
+# on providers with only RWO storage (e.g. Hetzner hcloud-volumes).
 sharedStorage:
   enabled: false
-  storageClass: ""  # Leave empty to use cluster default
+  # storageClass for the shared PVC when nfsServer.enabled=false.
+  # Leave empty to use the cluster default (must support ReadWriteMany).
+  storageClass: ""
   size: 10Gi
   accessModes:
     - ReadWriteMany
   # Allowlist of group names to mount as shared directories.
   # If empty, all groups from the user's Keycloak token are mounted.
-  # Groups are mounted at <mountPathPrefix>/<group> inside user pods.
   groups: []
   # Mount path prefix for shared group directories inside user pods.
   mountPathPrefix: /shared
+  # In-cluster NFS server — deploys quay.io/nebari/volume-nfs backed by a
+  # single RWO PVC and re-exports it as RWX NFS to all user pods.
+  # Enables shared storage on providers that only have RWO StorageClasses.
+  nfsServer:
+    enabled: false
+    # StorageClass for the NFS server's backend RWO PVC.
+    # Leave empty to use the cluster default.
+    storageClass: ""
+    image:
+      repository: quay.io/nebari/volume-nfs
+      tag: "0.8-repack"
 
 # =============================================================================
 # Nebi Integration
