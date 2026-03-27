@@ -93,6 +93,13 @@ def get_nebi_environments(user):
         log.warning("nebi-envs: no auth_state for user %s, cannot list environments", username)
         return []
 
+    log.info(
+        "nebi-envs: auth_state for %s — keys=%s, has_refresh_token=%s, has_access_token=%s, source=%s",
+        username, list(auth_state.keys()),
+        bool(auth_state.get("refresh_token")),
+        bool(auth_state.get("access_token")),
+        "user_dict" if user.get("auth_state") else "hub_api_fallback",
+    )
     refresh_token = auth_state.get("refresh_token")
     access_token = auth_state.get("access_token", "")
 
