@@ -29,7 +29,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   nfs:
     server: {{ include "nebari-data-science-pack.fullname" . }}-nfs.{{ .Release.Namespace }}.svc.cluster.local
-    path: /
+    path: /exports
 ---
 # Shared-storage PVC — bound to the NFS-backed PV above.
 # User pods mount this PVC with per-group subPaths (/shared/<group>).
