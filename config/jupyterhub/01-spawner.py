@@ -249,6 +249,10 @@ async def _nebi_pre_spawn_hook(spawner):
     except Exception:
         log.exception("Nebi auto-auth failed for %s (pod will still spawn)", spawner.user.name)
 
+    # Tell jhub-app-proxy to use pixi activation (instead of conda) for app pods.
+    # The nebi binary in the pod handles `nebi pull` and pixi env activation.
+    spawner.environment = {**spawner.environment, "JHUB_APP_ENV_MANAGER": "pixi"}
+
 
 # Only register the hook when Nebi integration is configured.
 if nebi_remote_url and get_config("custom.nebi-internal-url", ""):

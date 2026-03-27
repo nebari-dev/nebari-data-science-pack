@@ -11,3 +11,5 @@ data:
 {{ .Files.Get "config/jupyterhub/01-spawner.py" | indent 4 }}
   02-jhub-apps.py: |
 {{ .Files.Get "config/jupyterhub/02-jhub-apps.py" | indent 4 }}
+  03-nebi-envs.py: |
+{{ .Files.Get "config/jupyterhub/03-nebi-envs.py" | indent 4 }}
