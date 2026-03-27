@@ -160,6 +160,7 @@ RUN python3 /tmp/patch-terminal-font.py \
 COPY terminal/bashrc /etc/skel/.bashrc
 COPY terminal/nebari-terminal.sh /etc/profile.d/nebari-terminal.sh
 COPY terminal/starship.toml /etc/starship.toml
+COPY terminal/starship-light.toml /etc/starship-light.toml
 
 # JupyterLab settings overrides (schema defaults for theme)
 COPY terminal/overrides.json /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/settings/overrides.json

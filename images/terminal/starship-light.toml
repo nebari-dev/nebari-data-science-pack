@@ -6,7 +6,7 @@
 add_newline = false
 
 # Default palette — overridden by nebari-terminal.sh based on terminal theme
-palette = "catppuccin_mocha"
+palette = "catppuccin_latte"
 
 format = """
 $os$username$directory$git_branch$git_status$python$conda$cmd_duration$line_break$character"""

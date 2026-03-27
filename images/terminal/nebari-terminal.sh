@@ -7,11 +7,16 @@ if [ "${NEBARI_TERMINAL_CUSTOMIZATION}" = "false" ]; then
     return 0 2>/dev/null || exit 0
 fi
 
-# Always use the system-wide starship config so updates take effect for all
-# users without requiring them to delete their personal config. Users who
-# want a custom prompt can set STARSHIP_CONFIG in their own .bashrc.
-export STARSHIP_CONFIG="/etc/starship.toml"
+# Use the system-wide starship config. Two variants are available:
+#   /etc/starship.toml       - Catppuccin Mocha (dark backgrounds)
+#   /etc/starship-light.toml - Catppuccin Latte (light backgrounds)
+# Default to dark. Users can switch by adding to their .bashrc:
+#   export STARSHIP_CONFIG="/etc/starship-light.toml"
+if [ -z "${STARSHIP_CONFIG}" ]; then
+    export STARSHIP_CONFIG="/etc/starship.toml"
+fi
 
 if command -v starship &> /dev/null; then
     eval "$(starship init bash)"
+    eval "$(starship completions bash)"
 fi
