@@ -6,15 +6,7 @@
 add_newline = false
 
 format = """
-$username\
-$directory\
-$git_branch\
-$git_status\
-$python\
-$conda\
-$cmd_duration\
-$line_break\
-$character"""
+$username$directory$git_branch$git_status$python$conda$cmd_duration$line_break$character"""
 
 [username]
 show_always = true
@@ -26,10 +18,10 @@ format = '[$user]($style) '
 truncation_length = 3
 truncation_symbol = ".../"
 style = "bold cyan"
-format = '[ $path]($style) '
+format = '[ $path]($style) '
 
 [git_branch]
-symbol = " "
+symbol = " "
 style = "bold purple"
 format = '[$symbol$branch]($style) '
 
@@ -38,12 +30,12 @@ style = "bold red"
 format = '([$all_status$ahead_behind]($style) )'
 
 [python]
-symbol = " "
+symbol = " "
 style = "bold yellow"
 format = '[$symbol$version]($style) '
 
 [conda]
-symbol = " "
+symbol = " "
 style = "bold green"
 format = '[$symbol$environment]($style) '
 ignore_base = false
