@@ -75,6 +75,16 @@ def get_nebi_environments(user):
                 )
                 with urlopen(req, timeout=10) as resp:
                     auth_state = json.loads(resp.read()).get("auth_state")
+                if auth_state:
+                    log.info(
+                        "nebi-envs: fetched auth_state for %s via hub API — keys=%s, "
+                        "has_refresh_token=%s, has_access_token=%s",
+                        username, list(auth_state.keys()),
+                        bool(auth_state.get("refresh_token")),
+                        bool(auth_state.get("access_token")),
+                    )
+                else:
+                    log.warning("nebi-envs: hub API returned auth_state=None for %s", username)
             except Exception as exc:
                 log.error("nebi-envs: failed to fetch auth_state for %s: %s", username, exc)
         else:
