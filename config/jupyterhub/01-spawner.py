@@ -302,6 +302,35 @@ async def _nebi_pre_spawn_hook(spawner):
 
         spawner.environment = {**spawner.environment, "NEBI_AUTH_TOKEN": nebi_jwt}
         log.info("Nebi auto-auth succeeded for %s", spawner.user.name)
+
+        # If a nebi workspace is selected (via jhub-apps environment selector),
+        # add an init container to pull it before the app starts.
+        conda_env = getattr(spawner, "user_options", {}).get("conda_env", "")
+        if conda_env:
+            # conda_env may be "owner/workspace-name" or just "workspace-name"
+            workspace_name = conda_env.rsplit("/", 1)[-1] if "/" in conda_env else conda_env
+            nebi_remote = get_config("custom.nebi-remote-url", "")
+            log.info(
+                "Adding nebi-pull init container for workspace %s (user %s)",
+                workspace_name, spawner.user.name,
+            )
+            spawner.init_containers = list(spawner.init_containers) + [{
+                "name": "nebi-pull",
+                "image": spawner.image,
+                "command": [
+                    "/bin/sh", "-c",
+                    f"nebi pull {workspace_name} --force || "
+                    f"echo 'WARNING: nebi pull {workspace_name} failed (app will start without workspace)'",
+                ],
+                "env": [
+                    {"name": "NEBI_AUTH_TOKEN", "value": nebi_jwt},
+                    {"name": "NEBI_REMOTE_URL", "value": nebi_remote},
+                ],
+                "volumeMounts": [
+                    {"name": "nebi-bin", "mountPath": "/usr/local/bin/nebi", "subPath": "nebi"},
+                    {"name": "home", "mountPath": "/home/jovyan"},
+                ],
+            }]
     except Exception:
         log.exception("Nebi auto-auth failed for %s (pod will still spawn)", spawner.user.name)
 
