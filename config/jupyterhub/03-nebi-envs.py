@@ -4,12 +4,33 @@
 import json
 import logging
 import os
+import urllib.error
+import urllib.request
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from z2jh import get_config
 
 log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _extract_error_body(exc):
+    """Extract HTTP response body from an exception for diagnostic logging.
+
+    urllib.error.HTTPError exposes the body via .read(); other exceptions
+    do not.  Returns an empty string if the body cannot be read.
+    """
+    if hasattr(exc, "read"):
+        try:
+            return exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            pass
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -42,9 +63,10 @@ def _sync_refresh_access_token(refresh_token, keycloak_url, hub_client_id, hub_c
             data = json.loads(resp.read())
             return data.get("access_token", "")
     except Exception as exc:
+        resp_body = _extract_error_body(exc)
         log.error(
-            "nebi-envs: Keycloak token refresh failed: %s (url=%s, client_id=%s)",
-            exc, keycloak_url, hub_client_id,
+            "nebi-envs: Keycloak token refresh failed: %s response=%s (url=%s, client_id=%s)",
+            exc, resp_body, keycloak_url, hub_client_id,
         )
         return ""
 
@@ -76,16 +98,25 @@ def _sync_exchange_access_token_for_nebi_id_token(
             # Prefer id_token if present (has user identity claims), fall back to access_token
             return data.get("id_token") or data.get("access_token", "")
     except Exception as exc:
+        resp_body = _extract_error_body(exc)
         log.error(
-            "nebi-envs: Keycloak token exchange failed: %s (url=%s, audience=%s, client_id=%s)",
-            exc, keycloak_url, nebi_client_id, hub_client_id,
+            "nebi-envs: Keycloak token exchange failed: %s response=%s (url=%s, audience=%s, client_id=%s)",
+            exc, resp_body, keycloak_url, nebi_client_id, hub_client_id,
         )
         return ""
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Prevent urllib from following redirects (matches async follow_redirects=False)."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(newurl, code, msg, headers, fp)
 
 
 def _sync_exchange_nebi_id_token_for_jwt(nebi_id_token, nebi_internal_url):
     """Exchange a Nebi-audience ID token for a Nebi JWT via the session endpoint.
 
+    Uses a no-redirect opener to match the async version's follow_redirects=False.
     Returns the Nebi JWT string, or empty string on failure.
     """
     session_url = f"{nebi_internal_url.rstrip('/')}/api/v1/auth/session"
@@ -94,14 +125,16 @@ def _sync_exchange_nebi_id_token_for_jwt(nebi_id_token, nebi_internal_url):
         headers={"Cookie": f"IdToken={nebi_id_token}"},
         method="GET",
     )
+    opener = urllib.request.build_opener(_NoRedirectHandler)
     try:
-        with urlopen(req, timeout=10) as resp:
+        with opener.open(req, timeout=10) as resp:
             data = json.loads(resp.read())
             return data.get("token", "")
     except Exception as exc:
+        resp_body = _extract_error_body(exc)
         log.error(
-            "nebi-envs: Nebi session exchange failed: %s (url=%s)",
-            exc, session_url,
+            "nebi-envs: Nebi session exchange failed: %s response=%s (url=%s)",
+            exc, resp_body, session_url,
         )
         return ""
 
@@ -209,7 +242,14 @@ def get_nebi_environments(user):
             )
             return []
 
-        # Step 5: Filter to ready workspaces and format as owner/name
+        # Step 5: Validate response shape and filter to ready workspaces
+        if not isinstance(workspaces, list):
+            log.error(
+                "nebi-envs: unexpected workspaces response type %s for %s (expected list)",
+                type(workspaces).__name__, username,
+            )
+            return []
+
         envs = []
         for ws in workspaces:
             if ws.get("status") != "ready":
