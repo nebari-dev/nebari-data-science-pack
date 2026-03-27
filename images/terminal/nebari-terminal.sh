@@ -7,13 +7,15 @@ if [ "${NEBARI_TERMINAL_CUSTOMIZATION}" = "false" ]; then
     return 0 2>/dev/null || exit 0
 fi
 
-# Use the system-wide starship config. Two variants are available:
-#   /etc/starship.toml       - Catppuccin Mocha (dark backgrounds)
-#   /etc/starship-light.toml - Catppuccin Latte (light backgrounds)
-# Default to dark. Users can switch by adding to their .bashrc:
-#   export STARSHIP_CONFIG="/etc/starship-light.toml"
+# Auto-detect JupyterLab theme. The nerd-font-loader.js writes "dark" or "light"
+# to /tmp/.starship-theme. Use matching Catppuccin palette config.
+# Users can override by setting STARSHIP_CONFIG in their .bashrc.
 if [ -z "${STARSHIP_CONFIG}" ]; then
-    export STARSHIP_CONFIG="/etc/starship.toml"
+    if [ -f /tmp/.starship-theme ] && grep -q "light" /tmp/.starship-theme 2>/dev/null; then
+        export STARSHIP_CONFIG="/etc/starship-light.toml"
+    else
+        export STARSHIP_CONFIG="/etc/starship.toml"
+    fi
 fi
 
 if command -v starship &> /dev/null; then
