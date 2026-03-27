@@ -14,19 +14,11 @@ js_path = sys.argv[2]
 with open(js_path) as f:
     js_code = f.read().strip()
 
-# Build the injection:
-# 1. Preload link for high-priority early fetch
-# 2. @font-face CSS declarations
-# 3. Hidden span that uses the font — forces the browser to download
-#    it IMMEDIATELY instead of lazily (CSS @font-face only downloads
-#    when a DOM element uses the font). This ensures the font is in
-#    the browser cache before xterm.js initializes.
-# 4. JS loader for re-measurement fallback
 injection = (
-    '<link rel=\"preload\" href=\"/static/lab/fonts/FiraCodeNerdFontMono-Regular.ttf\" as=\"font\" type=\"font/ttf\" crossorigin>'
+    '<link rel=\"preload\" href=\"/static/lab/fonts/FiraCodeNerdFontMono-Regular.woff2\" as=\"font\" type=\"font/woff2\" crossorigin>'
     '<style>'
-    '@font-face{font-family:\"FiraCode Nerd Font\";src:url(\"/static/lab/fonts/FiraCodeNerdFontMono-Regular.ttf\") format(\"truetype\");font-weight:400;font-display:block}'
-    '@font-face{font-family:\"FiraCode Nerd Font\";src:url(\"/static/lab/fonts/FiraCodeNerdFontMono-Bold.ttf\") format(\"truetype\");font-weight:700;font-display:block}'
+    '@font-face{font-family:\"FiraCode Nerd Font\";src:url(\"/static/lab/fonts/FiraCodeNerdFontMono-Regular.woff2\") format(\"woff2\");font-weight:400;font-display:block}'
+    '@font-face{font-family:\"FiraCode Nerd Font\";src:url(\"/static/lab/fonts/FiraCodeNerdFontMono-Bold.woff2\") format(\"woff2\");font-weight:700;font-display:block}'
     '</style>'
     '<span style=\"font-family:FiraCode Nerd Font;position:absolute;left:-9999px;visibility:hidden\">\uf07c</span>'
     '<script>' + js_code + '</script>'

@@ -1,4 +1,9 @@
+import mimetypes
 import os
+
+# Register font MIME types so browsers don't reject them with "Failed to decode"
+mimetypes.add_type("font/ttf", ".ttf")
+mimetypes.add_type("font/woff2", ".woff2")
 
 # jupyter-server-proxy configuration for Nebi
 # Launches `nebi serve` when the user clicks "Nebi" in the JupyterLab launcher.

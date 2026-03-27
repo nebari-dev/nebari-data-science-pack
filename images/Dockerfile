@@ -150,11 +150,11 @@ RUN /opt/scripts/inject-font.sh \
 
 # Patch JupyterLab's JS bundle:
 # 1. Change default terminal font to Nerd Font
-# 2. Wait for font to load before opening xterm (prevents tofu/boxes on first load)
-RUN sed -i "s|fontFamily:'Menlo, Consolas, \"DejaVu Sans Mono\", monospace',fontSize:13,lineHeight:1|fontFamily:\"'FiraCode Nerd Font', 'Fira Code', monospace\",fontSize:14,lineHeight:1.2|" \
-    /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static/jlab_core.*.js && \
-    sed -i 's|if(!this._termOpened){this._term.open(this.node)|if(!this._termOpened){if(!document.fonts.check("14px FiraCode Nerd Font")){requestAnimationFrame(()=>this.update());return}this._term.open(this.node)|' \
-    /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static/jlab_core.*.js
+# 2. Gate xterm.open() on font availability (prevents boxes on first load)
+COPY scripts/patch-terminal-font.py /tmp/patch-terminal-font.py
+RUN python3 /tmp/patch-terminal-font.py \
+    /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static/jlab_core.*.js \
+    && rm /tmp/patch-terminal-font.py
 
 # Shell configuration
 COPY terminal/bashrc /etc/skel/.bashrc
