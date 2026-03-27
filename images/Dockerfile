@@ -148,9 +148,12 @@ RUN /opt/scripts/inject-font.sh \
     /tmp/nerd-font-loader.js \
     && rm /tmp/nerd-font-loader.js
 
-# Patch the hardcoded terminal defaultOptions in JupyterLab's JS bundle
-# to use Nerd Font instead of Menlo/Consolas
+# Patch JupyterLab's JS bundle:
+# 1. Change default terminal font to Nerd Font
+# 2. Wait for font to load before opening xterm (prevents tofu/boxes on first load)
 RUN sed -i "s|fontFamily:'Menlo, Consolas, \"DejaVu Sans Mono\", monospace',fontSize:13,lineHeight:1|fontFamily:\"'FiraCode Nerd Font', 'Fira Code', monospace\",fontSize:14,lineHeight:1.2|" \
+    /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static/jlab_core.*.js && \
+    sed -i 's|if(!this._termOpened){this._term.open(this.node)|if(!this._termOpened){if(!document.fonts.check("14px FiraCode Nerd Font")){requestAnimationFrame(()=>this.update());return}this._term.open(this.node)|' \
     /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static/jlab_core.*.js
 
 # Shell configuration
