@@ -80,6 +80,9 @@ sharedStorage:
     image:
       repository: quay.io/nebari/volume-nfs
       tag: "0.8-repack"
+    # Deploy a DaemonSet that installs nfs-common on every node.
+    # Required on k3s/minimal OS nodes that ship without NFS client tools.
+    installClient: false
 
 # =============================================================================
 # Nebi Integration

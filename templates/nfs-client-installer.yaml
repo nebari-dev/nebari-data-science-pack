@@ -1,0 +1,55 @@
+{{- if and .Values.sharedStorage.enabled .Values.sharedStorage.nfsServer.enabled .Values.sharedStorage.nfsServer.installClient }}
+# DaemonSet that installs nfs-common on every node so kubelet can mount NFS PVs.
+# k3s worker nodes typically ship without NFS client tools; this is the standard
+# pattern for installing host-level dependencies without reprovisioning nodes.
+# Runs in the host PID/network namespace (nsenter) to reach the node's package manager.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "nebari-data-science-pack.fullname" . }}-nfs-client-installer
+  labels:
+    {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: nfs-client-installer
+      {{- include "nebari-data-science-pack.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: nfs-client-installer
+        {{- include "nebari-data-science-pack.selectorLabels" . | nindent 8 }}
+    spec:
+      hostPID: true
+      hostNetwork: true
+      tolerations:
+        - operator: Exists
+      initContainers:
+        - name: install-nfs-common
+          image: ubuntu:22.04
+          command:
+            - nsenter
+            - -m
+            - -u
+            - -i
+            - -n
+            - -p
+            - -t
+            - "1"
+            - --
+            - bash
+            - -c
+            - |
+              if ! command -v mount.nfs >/dev/null 2>&1; then
+                apt-get update -qq && apt-get install -y -qq nfs-common
+              fi
+          securityContext:
+            privileged: true
+      containers:
+        - name: pause
+          image: gcr.io/google-containers/pause:3.9
+          resources:
+            requests:
+              cpu: 1m
+              memory: 1Mi
+{{- end }}
