@@ -48,6 +48,31 @@ c.KubeSpawner.volume_mounts = [
 c.KubeSpawner.notebook_dir = "/home/jovyan"
 c.KubeSpawner.working_dir = "/home/jovyan"
 
+# Co-locate all pods for the same user on the same node.
+# hcloud-volumes is ReadWriteOnce — only one node can mount it at a time.
+# Pod affinity ensures jhub-apps app pods land on the same node as the
+# user's JupyterLab pod so the shared home PVC can be mounted by all of them.
+c.KubeSpawner.extra_pod_config = {
+    "affinity": {
+        "podAffinity": {
+            "requiredDuringSchedulingIgnoredDuringExecution": [
+                {
+                    "labelSelector": {
+                        "matchExpressions": [
+                            {
+                                "key": "hub.jupyter.org/username",
+                                "operator": "In",
+                                "values": ["{username}"],
+                            }
+                        ]
+                    },
+                    "topologyKey": "kubernetes.io/hostname",
+                }
+            ]
+        }
+    }
+}
+
 
 # ---------------------------------------------------------------------------
 # Nebi binary (init container)
