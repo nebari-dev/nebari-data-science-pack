@@ -57,8 +57,28 @@ def get_nebi_environments(user):
         )
         return []
 
-    # Extract auth_state from user dict
+    # Extract auth_state from user dict.  jhub-apps fetches the user with a
+    # per-user token that lacks admin:auth_state scope, so auth_state is
+    # usually None.  Fall back to fetching it directly using the jhub-apps
+    # service API token (JUPYTERHUB_API_TOKEN) which has admin:auth_state.
+    # This is still per-user: we read THIS user's Keycloak tokens, then
+    # exchange them for a nebi JWT scoped to this user.
     auth_state = user.get("auth_state")
+    if not auth_state:
+        api_url = os.environ.get("JUPYTERHUB_API_URL", "")
+        api_token = os.environ.get("JUPYTERHUB_API_TOKEN", "")
+        if api_url and api_token:
+            try:
+                req = Request(
+                    f"{api_url}/users/{username}",
+                    headers={"Authorization": f"token {api_token}"},
+                )
+                with urlopen(req, timeout=10) as resp:
+                    auth_state = json.loads(resp.read()).get("auth_state")
+            except Exception as exc:
+                log.error("nebi-envs: failed to fetch auth_state for %s: %s", username, exc)
+        else:
+            log.warning("nebi-envs: JUPYTERHUB_API_URL/TOKEN not set, cannot fetch auth_state")
     if not auth_state:
         log.warning("nebi-envs: no auth_state for user %s, cannot list environments", username)
         return []
