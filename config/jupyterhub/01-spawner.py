@@ -119,11 +119,55 @@ def _extract_error_body(exc):
     return ""
 
 
+def _decode_jwt_claims(token):
+    """Decode JWT payload without verification, for diagnostic logging only.
+
+    Returns a dict of claims or {} if the token is not a valid JWT.
+    """
+    import base64
+    parts = token.split(".")
+    if len(parts) != 3:
+        return {}
+    try:
+        payload = parts[1]
+        # Add padding
+        payload += "=" * (4 - len(payload) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload))
+    except Exception:
+        return {}
+
+
+def _log_token_diagnostics(label, token):
+    """Log JWT claims relevant to token exchange debugging."""
+    claims = _decode_jwt_claims(token)
+    if not claims:
+        log.warning(
+            "token-exchange: %s token is not a JWT (opaque token, len=%d)",
+            label, len(token),
+        )
+        return
+    import time
+    exp = claims.get("exp", 0)
+    now = int(time.time())
+    log.info(
+        "token-exchange: %s token — iss=%s, aud=%s, azp=%s, exp=%s (%s), sub=%s, scope=%s",
+        label,
+        claims.get("iss", "<missing>"),
+        claims.get("aud", "<missing>"),
+        claims.get("azp", "<missing>"),
+        exp,
+        "EXPIRED" if exp and exp < now else f"valid for {exp - now}s",
+        claims.get("sub", "<missing>"),
+        claims.get("scope", "<missing>"),
+    )
+
+
 def _sync_refresh_access_token(refresh_token, keycloak_url, hub_client_id, hub_client_secret):
     """Use the refresh token to get a fresh access token from Keycloak.
 
     Returns the new access token string, or empty string on failure.
     """
+    log.info("token-exchange step 1: refreshing access token (url=%s, client_id=%s)", keycloak_url, hub_client_id)
     body = urlencode({
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
@@ -139,11 +183,17 @@ def _sync_refresh_access_token(refresh_token, keycloak_url, hub_client_id, hub_c
     try:
         with urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read())
-            return data.get("access_token", "")
+            token = data.get("access_token", "")
+            if token:
+                log.info("token-exchange step 1: refresh succeeded")
+                _log_token_diagnostics("refreshed access", token)
+            else:
+                log.error("token-exchange step 1: refresh response had no access_token (keys: %s)", list(data.keys()))
+            return token
     except Exception as exc:
         resp_body = _extract_error_body(exc)
         log.error(
-            "Keycloak token refresh failed: %s response=%s (url=%s, client_id=%s)",
+            "token-exchange step 1 FAILED: %s response=%s (url=%s, client_id=%s)",
             exc, resp_body, keycloak_url, hub_client_id,
         )
         return ""
@@ -156,6 +206,11 @@ def _sync_exchange_access_token_for_nebi_id_token(
 
     Returns the Nebi ID token string, or empty string on failure.
     """
+    log.info(
+        "token-exchange step 2: exchanging access token for nebi ID token "
+        "(url=%s, audience=%s, client_id=%s)",
+        keycloak_url, nebi_client_id, hub_client_id,
+    )
     body = urlencode({
         "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
         "subject_token": access_token,
@@ -174,11 +229,17 @@ def _sync_exchange_access_token_for_nebi_id_token(
         with urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read())
             # Prefer id_token if present (has user identity claims), fall back to access_token
-            return data.get("id_token") or data.get("access_token", "")
+            token = data.get("id_token") or data.get("access_token", "")
+            if token:
+                log.info("token-exchange step 2: exchange succeeded (got %s)", "id_token" if data.get("id_token") else "access_token")
+                _log_token_diagnostics("exchanged nebi", token)
+            else:
+                log.error("token-exchange step 2: exchange response had no id_token or access_token (keys: %s)", list(data.keys()))
+            return token
     except Exception as exc:
         resp_body = _extract_error_body(exc)
         log.error(
-            "Keycloak token exchange failed: %s response=%s (url=%s, audience=%s, client_id=%s)",
+            "token-exchange step 2 FAILED: %s response=%s (url=%s, audience=%s, client_id=%s)",
             exc, resp_body, keycloak_url, nebi_client_id, hub_client_id,
         )
         return ""
@@ -199,6 +260,7 @@ def _sync_exchange_nebi_id_token_for_jwt(nebi_id_token, nebi_internal_url):
     Returns the Nebi JWT string, or empty string on failure.
     """
     session_url = f"{nebi_internal_url.rstrip('/')}/api/v1/auth/session"
+    log.info("token-exchange step 3: exchanging nebi ID token for JWT (url=%s)", session_url)
     req = Request(
         session_url,
         headers={"Cookie": f"IdToken={nebi_id_token}"},
@@ -208,11 +270,16 @@ def _sync_exchange_nebi_id_token_for_jwt(nebi_id_token, nebi_internal_url):
     try:
         with opener.open(req, timeout=10) as resp:
             data = json.loads(resp.read())
-            return data.get("token", "")
+            token = data.get("token", "")
+            if token:
+                log.info("token-exchange step 3: nebi JWT obtained (len=%d)", len(token))
+            else:
+                log.error("token-exchange step 3: nebi session response had no 'token' key (keys: %s)", list(data.keys()))
+            return token
     except Exception as exc:
         resp_body = _extract_error_body(exc)
         log.error(
-            "Nebi session exchange failed: %s response=%s (url=%s)",
+            "token-exchange step 3 FAILED: %s response=%s (url=%s)",
             exc, resp_body, session_url,
         )
         return ""
@@ -227,14 +294,21 @@ def get_nebi_jwt(refresh_token, access_token, keycloak_url, nebi_cid, hub_cid, h
 
     Returns the Nebi JWT string, or empty string on any failure.
     """
+    log.info("token-exchange: starting 3-step exchange (keycloak=%s, nebi=%s)", keycloak_url, nebi_url)
+
     # Step 1: Refresh the access token (preferred) or use the existing one
     if refresh_token:
         access_token = _sync_refresh_access_token(
             refresh_token, keycloak_url, hub_cid, hub_secret,
         )
         if not access_token:
+            log.error("token-exchange: aborting — step 1 (refresh) returned no token")
             return ""
-    if not access_token:
+    elif access_token:
+        log.info("token-exchange: no refresh_token, using existing access_token")
+        _log_token_diagnostics("existing access", access_token)
+    else:
+        log.error("token-exchange: aborting — no refresh_token and no access_token")
         return ""
 
     # Step 2: Exchange access token for Nebi-audience ID token
@@ -242,10 +316,17 @@ def get_nebi_jwt(refresh_token, access_token, keycloak_url, nebi_cid, hub_cid, h
         access_token, keycloak_url, nebi_cid, hub_cid, hub_secret,
     )
     if not nebi_id_token:
+        log.error("token-exchange: aborting — step 2 (exchange) returned no token")
         return ""
 
     # Step 3: Exchange Nebi ID token for Nebi JWT
-    return _sync_exchange_nebi_id_token_for_jwt(nebi_id_token, nebi_url)
+    nebi_jwt = _sync_exchange_nebi_id_token_for_jwt(nebi_id_token, nebi_url)
+    if not nebi_jwt:
+        log.error("token-exchange: aborting — step 3 (nebi session) returned no token")
+        return ""
+
+    log.info("token-exchange: all 3 steps succeeded")
+    return nebi_jwt
 
 
 # ---------------------------------------------------------------------------
