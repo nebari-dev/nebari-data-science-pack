@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 # causing a path mismatch when usernames contain special characters (e.g. emails).
 # Each user still gets an isolated PVC via claim-{username}.
 c.KubeSpawner.storage_pvc_ensure = True
-c.KubeSpawner.storage_capacity = "10Gi"
+c.KubeSpawner.storage_capacity = get_config("custom.storage-capacity", "20Gi")
 c.KubeSpawner.storage_access_modes = ["ReadWriteOnce"]
 c.KubeSpawner.volumes = [
     {
