@@ -135,9 +135,15 @@ class EnvoyOIDCAuthenticator(Authenticator):
         id_token, access_token, refresh_token = self._extract_envoy_cookies(handler)
 
         if not id_token:
-            # Cookies missing — session may have expired, force re-login
-            self.log.warning("refresh_user: no IdToken cookie for %s, invalidating session", user.name)
-            return False
+            # No IdToken cookie — this happens on internal API calls from
+            # singleuser pods (e.g. activity pings) where no browser cookies
+            # are present.  Return True to keep the session alive; only
+            # browser requests carry the Envoy OIDC cookies.
+            self.log.debug(
+                "refresh_user: no IdToken cookie for %s (likely internal API call), keeping session",
+                user.name,
+            )
+            return True
 
         auth_state = {
             k: v for k, v in {
