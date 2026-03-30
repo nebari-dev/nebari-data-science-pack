@@ -135,12 +135,24 @@ class EnvoyOIDCAuthenticator(Authenticator):
         id_token, access_token, refresh_token = self._extract_envoy_cookies(handler)
 
         if not id_token:
-            # No IdToken cookie — this happens on internal API calls from
-            # singleuser pods (e.g. activity pings) where no browser cookies
-            # are present.  Return True to keep the session alive; only
-            # browser requests carry the Envoy OIDC cookies.
+            # This method is called on an already-authenticated user —
+            # JupyterHub has already validated the request (via OAuth token
+            # or API token) before calling refresh_user.  We are NOT doing
+            # authentication here; we're just deciding whether to update
+            # auth_state with fresh Envoy cookies or keep the existing session.
+            #
+            # Envoy OIDC cookies (IdToken, AccessToken) are only present on
+            # browser requests.  Requests from singleuser pods (e.g. activity
+            # pings via JUPYTERHUB_API_TOKEN) have a handler but no cookies.
+            # Returning False here would invalidate the entire session,
+            # causing 403s on all subsequent requests including the browser.
+            #
+            # Instead, skip the auth_state refresh and keep the session alive.
+            # Envoy Gateway handles token refresh independently at the gateway
+            # layer — the next browser request will carry fresh cookies and
+            # update auth_state then.
             self.log.debug(
-                "refresh_user: no IdToken cookie for %s (likely internal API call), keeping session",
+                "refresh_user: no IdToken cookie for %s, skipping auth_state refresh",
                 user.name,
             )
             return True
