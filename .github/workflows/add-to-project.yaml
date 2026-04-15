@@ -2,16 +2,14 @@ name: Add to project
 
 on:
   issues:
-    types: [opened]
+    types: [opened, labeled, unlabeled]
   pull_request:
-    types: [opened]
+    types: [opened, labeled, unlabeled]
 
 jobs:
-  add-to-project:
-    runs-on: ubuntu-latest
-    steps:
-      # https://github.com/actions/add-to-project/releases/tag/v1.0.2
-      - uses: actions/add-to-project@244f685bbc3b7adfa8466e08b698b5577571133e
-        with:
-          project-url: ${{ vars.PROJECT_BOARD_URL }}
-          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
+  sync:
+    uses: nebari-dev/.github/.github/workflows/sync-project-priority.yaml@main
+    with:
+      project-id: PVT_kwDOBd3CI84BKoKt
+    secrets:
+      token: ${{ secrets.ADD_TO_PROJECT_PAT }}
