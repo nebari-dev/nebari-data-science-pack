@@ -54,6 +54,11 @@ c.KubeSpawner.volume_mounts = [
         "mountPath": "/etc/jupyter/jupyter_server_config.py",
         "subPath": "jupyter_server_config.py",
     },
+    {
+        "name": "singleuser-config",
+        "mountPath": "/etc/jupyter/idle_shutdown_ext.py",
+        "subPath": "idle_shutdown_ext.py",
+    },
 ]
 
 c.KubeSpawner.notebook_dir = "/home/jovyan"

@@ -16,89 +16,85 @@ data:
 
     # Disable the built-in shutdown_no_activity_timeout — it is defeated by
     # JupyterLab's WebSocket reconnect cycle which resets the activity clock
-    # every ~5 minutes. Our custom monitor below replaces it.
+    # every ~5 minutes. Our custom monitor (idle_shutdown_ext) replaces it.
     c.ServerApp.shutdown_no_activity_timeout = 0
 
-    # ---------------------------------------------------------------------------
-    # Custom idle shutdown monitor
-    # ---------------------------------------------------------------------------
-    # Monitors kernel/terminal count and real HTTP activity (excluding WebSocket
-    # connections) to decide when to shut down the server. This replaces the
-    # built-in shutdown_no_activity_timeout which is defeated by JupyterLab's
-    # WebSocket reconnect cycle.
-    #
-    # Behavior:
-    #   - Kernels or terminals running → server stays alive
-    #   - No kernels/terminals, but recent HTTP activity (user browsing files,
-    #     navigating JupyterLab) → server stays alive
-    #   - No kernels/terminals AND no HTTP activity for timeout → server stops
-    #
-    # WebSocket connections (the ~5min reconnect cycle from idle browser tabs)
-    # are explicitly excluded from activity tracking.
+    # Load the idle shutdown extension from the mounted ConfigMap
+    import sys
+    sys.path.insert(0, "/etc/jupyter")
+    c.ServerApp.jpserver_extensions = {"idle_shutdown_ext": True}
+
+  idle_shutdown_ext.py: |
+    """Jupyter server extension: shut down when no kernels/terminals and no real HTTP activity.
+
+    Unlike the built-in shutdown_no_activity_timeout, this ignores WebSocket
+    reconnect traffic (JupyterLab's ~5 min cycle) and only tracks real HTTP
+    requests as user activity. This means:
+      - User browsing files with no kernel → server stays alive
+      - Idle open tab with only WebSocket reconnects → server shuts down
+    """
+
+    import datetime as _dt
+    import logging
+
+    from tornado.ioloop import IOLoop, PeriodicCallback
+    from tornado.web import RequestHandler
+    from tornado.websocket import WebSocketHandler
+
+    log = logging.getLogger(__name__)
+
     _IDLE_SHUTDOWN_TIMEOUT = {{ .Values.singleuserCuller.server.shutdownNoActivityTimeout }}
     _IDLE_CHECK_INTERVAL = 15  # seconds
 
-    import datetime as _dt
-    _last_user_activity = [_dt.datetime.now(_dt.timezone.utc)]
+    _last_user_activity = _dt.datetime.now(_dt.timezone.utc)
+    _shutdown_scheduled = False
+    _original_prepare = None
 
-    def _start_idle_monitor():
-        from tornado.ioloop import IOLoop, PeriodicCallback
-        from tornado.web import RequestHandler
-        from tornado.websocket import WebSocketHandler
-        from jupyter_server.serverapp import ServerApp
-        import logging
 
-        log = logging.getLogger("idle-shutdown")
-        app = ServerApp.instance()
-        _handle = [None]
+    def _tracking_prepare(self):
+        """RequestHandler.prepare override that tracks non-WebSocket requests."""
+        global _last_user_activity
+        if not isinstance(self, WebSocketHandler):
+            _last_user_activity = _dt.datetime.now(_dt.timezone.utc)
+        return _original_prepare(self)
 
-        # Patch RequestHandler.prepare to track non-WebSocket HTTP requests
+
+    def _load_jupyter_server_extension(serverapp):
+        """Called by jupyter_server when the extension is loaded."""
+        global _original_prepare
+
+        # Patch RequestHandler.prepare to track real HTTP activity
         _original_prepare = RequestHandler.prepare
-
-        def _tracking_prepare(self):
-            if not isinstance(self, WebSocketHandler):
-                _last_user_activity[0] = _dt.datetime.now(_dt.timezone.utc)
-            return _original_prepare(self)
-
         RequestHandler.prepare = _tracking_prepare
 
         def _check():
-            km = app.kernel_manager
+            global _shutdown_scheduled
+            km = serverapp.kernel_manager
             has_kernels = bool(km.list_kernel_ids())
 
             has_terminals = False
             try:
-                tm = app.web_app.settings.get("terminal_manager")
+                tm = serverapp.web_app.settings.get("terminal_manager")
                 if tm and tm.list():
                     has_terminals = True
             except Exception:
                 pass
 
-            # Kernels or terminals running — cancel any pending shutdown
             if has_kernels or has_terminals:
-                if _handle[0] is not None:
-                    log.info("Kernel or terminal started, cancelling shutdown.")
-                    IOLoop.current().remove_timeout(_handle[0])
-                    _handle[0] = None
+                _shutdown_scheduled = False
                 return
 
             # No kernels or terminals — check for recent real HTTP activity
             now = _dt.datetime.now(_dt.timezone.utc)
-            idle_secs = (now - _last_user_activity[0]).total_seconds()
+            idle_secs = (now - _last_user_activity).total_seconds()
 
-            if idle_secs >= _IDLE_SHUTDOWN_TIMEOUT:
-                if _handle[0] is None:
-                    log.info(
-                        "No kernels/terminals and no HTTP activity for %ds. "
-                        "Shutting down.", int(idle_secs),
-                    )
-                    IOLoop.current().call_later(0, app.stop)
-                    _handle[0] = True  # prevent duplicate shutdown
-            else:
-                if _handle[0] is not None and _handle[0] is not True:
-                    log.info("HTTP activity detected, cancelling shutdown.")
-                    IOLoop.current().remove_timeout(_handle[0])
-                    _handle[0] = None
+            if idle_secs >= _IDLE_SHUTDOWN_TIMEOUT and not _shutdown_scheduled:
+                log.warning(
+                    "No kernels/terminals and no HTTP activity for %ds. "
+                    "Shutting down.", int(idle_secs),
+                )
+                _shutdown_scheduled = True
+                IOLoop.current().call_later(0, serverapp.stop)
 
         pc = PeriodicCallback(_check, _IDLE_CHECK_INTERVAL * 1000)
         pc.start()
@@ -107,6 +103,3 @@ data:
             _IDLE_SHUTDOWN_TIMEOUT,
             _IDLE_CHECK_INTERVAL,
         )
-
-    from tornado.ioloop import IOLoop
-    IOLoop.current().add_callback(_start_idle_monitor)
