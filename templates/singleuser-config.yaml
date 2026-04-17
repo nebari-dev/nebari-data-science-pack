@@ -19,21 +19,19 @@ data:
     # every ~5 minutes. Our custom monitor (idle_shutdown_ext) replaces it.
     c.ServerApp.shutdown_no_activity_timeout = 0
 
-    # Load the idle shutdown monitor. We hook into ServerApp.init_signal
-    # (called late in initialization, after the IOLoop is ready) to start
-    # our monitor after the server is fully set up.
-    import sys
-    sys.path.insert(0, "/etc/jupyter")
+    # Load the idle shutdown monitor after the server starts.
+    # The config file runs during initialize(), before the IOLoop starts.
+    # We schedule the monitor setup to run once the IOLoop is running.
+    import sys as _sys
+    _sys.path.insert(0, "/etc/jupyter")
 
-    from jupyter_server.serverapp import ServerApp as _SA
-    _orig_init_signal = _SA.init_signal
-
-    def _patched_init_signal(self):
-        _orig_init_signal(self)
+    def _deferred_start_monitor():
+        from jupyter_server.serverapp import ServerApp
         import idle_shutdown_ext
-        idle_shutdown_ext.load_jupyter_server_extension(self)
+        idle_shutdown_ext.load_jupyter_server_extension(ServerApp.instance())
 
-    _SA.init_signal = _patched_init_signal
+    from tornado.ioloop import IOLoop as _IOLoop
+    _IOLoop.current().call_later(5, _deferred_start_monitor)
 
   idle_shutdown_ext.py: |
     """Jupyter server extension: shut down when no kernels/terminals and no real HTTP activity.
