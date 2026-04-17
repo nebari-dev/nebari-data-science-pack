@@ -62,14 +62,14 @@ nebariapp:
 singleuserCuller:
   kernel:
     cullConnected: true      # Cull kernels even with open browser connections
-    cullIdleTimeout: 90      # Seconds before an idle kernel is culled
-    cullInterval: 30         # How often to check for idle kernels (seconds)
+    cullIdleTimeout: 60      # Seconds before an idle kernel is culled
+    cullInterval: 15         # How often to check for idle kernels (seconds)
     cullBusy: false          # Don't cull kernels that are running code
   terminal:
-    cullInactiveTimeout: 90  # Seconds before an idle terminal is culled
-    cullInterval: 30         # How often to check for idle terminals (seconds)
+    cullInactiveTimeout: 60  # Seconds before an idle terminal is culled
+    cullInterval: 15         # How often to check for idle terminals (seconds)
   server:
-    shutdownNoActivityTimeout: 90  # Seconds after last kernel/terminal gone before server self-terminates
+    shutdownNoActivityTimeout: 60  # Seconds after last kernel/terminal gone before server self-terminates
 
 # Shared storage configuration (disabled - requires RWX storage class)
 sharedStorage:
