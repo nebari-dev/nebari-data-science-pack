@@ -184,6 +184,26 @@ jupyterhub:
     extraEnv:
       JUPYTERHUB_SINGLEUSER_APP: "jupyter_server.serverapp.ServerApp"
 
+    # Singleuser-level idle culling configuration.
+    # These settings run inside each user pod and enable culling even when
+    # browser tabs are left open (cull_connected=True). Once all kernels and
+    # terminals are culled, the server process shuts itself down after
+    # shutdown_no_activity_timeout seconds — the hub then sees it as stopped.
+    # Effective total timeout ≈ max(kernel, terminal) + shutdown_no_activity.
+    extraFiles:
+      jupyter-server-config:
+        mountPath: /etc/jupyter/jupyter_server_config.py
+        stringData: |
+          c.MappingKernelManager.cull_connected = True
+          c.MappingKernelManager.cull_idle_timeout = 900
+          c.MappingKernelManager.cull_interval = 300
+          c.MappingKernelManager.cull_busy = False
+
+          c.TerminalManager.cull_inactive_timeout = 900
+          c.TerminalManager.cull_interval = 300
+
+          c.ServerApp.shutdown_no_activity_timeout = 900
+
     # Storage: type "none" required because jhub-apps' JHubSpawner expects volumes
     # as a list, but the subchart's dynamic storage generates a dict.
     # Home directory PVC is configured in 01-spawner.py instead.
