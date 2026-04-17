@@ -14,4 +14,64 @@ data:
     c.TerminalManager.cull_inactive_timeout = {{ .Values.singleuserCuller.terminal.cullInactiveTimeout }}
     c.TerminalManager.cull_interval = {{ .Values.singleuserCuller.terminal.cullInterval }}
 
-    c.ServerApp.shutdown_no_activity_timeout = {{ .Values.singleuserCuller.server.shutdownNoActivityTimeout }}
+    # Disable the built-in shutdown_no_activity_timeout — it is defeated by
+    # JupyterLab's WebSocket reconnect cycle which resets the activity clock
+    # every ~5 minutes. Our custom monitor below replaces it.
+    c.ServerApp.shutdown_no_activity_timeout = 0
+
+    # ---------------------------------------------------------------------------
+    # Custom idle shutdown monitor
+    # ---------------------------------------------------------------------------
+    # Checks kernel and terminal count on an interval. When both reach zero
+    # (after culling), starts a countdown to shut down the server process.
+    # Unlike the built-in mechanism, this ignores WebSocket client connections
+    # and API activity — only actual kernels/terminals keep the server alive.
+    _IDLE_SHUTDOWN_TIMEOUT = {{ .Values.singleuserCuller.server.shutdownNoActivityTimeout }}
+    _IDLE_CHECK_INTERVAL = 15  # seconds
+
+    def _start_idle_monitor():
+        from tornado.ioloop import IOLoop, PeriodicCallback
+        from jupyter_server.serverapp import ServerApp
+        import logging
+
+        log = logging.getLogger("idle-shutdown")
+        app = ServerApp.instance()
+        _handle = [None]
+
+        def _check():
+            km = app.kernel_manager
+            has_kernels = bool(km.list_kernel_ids())
+
+            has_terminals = False
+            try:
+                tm = app.web_app.settings.get("terminal_manager")
+                if tm and tm.list():
+                    has_terminals = True
+            except Exception:
+                pass
+
+            if not has_kernels and not has_terminals:
+                if _handle[0] is None:
+                    log.info(
+                        "No kernels or terminals. Server will shut down in %ds.",
+                        _IDLE_SHUTDOWN_TIMEOUT,
+                    )
+                    _handle[0] = IOLoop.current().call_later(
+                        _IDLE_SHUTDOWN_TIMEOUT, app.stop
+                    )
+            else:
+                if _handle[0] is not None:
+                    log.info("Kernel or terminal started, cancelling shutdown.")
+                    IOLoop.current().remove_timeout(_handle[0])
+                    _handle[0] = None
+
+        pc = PeriodicCallback(_check, _IDLE_CHECK_INTERVAL * 1000)
+        pc.start()
+        log.info(
+            "Idle shutdown monitor started (timeout=%ds, check=%ds)",
+            _IDLE_SHUTDOWN_TIMEOUT,
+            _IDLE_CHECK_INTERVAL,
+        )
+
+    from tornado.ioloop import IOLoop
+    IOLoop.current().add_callback(_start_idle_monitor)
