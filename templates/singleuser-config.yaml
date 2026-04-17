@@ -60,6 +60,9 @@ data:
 
 
     def _load_jupyter_server_extension(serverapp):
+        load_jupyter_server_extension(serverapp)
+
+    def load_jupyter_server_extension(serverapp):
         """Called by jupyter_server when the extension is loaded."""
         global _original_prepare
 
