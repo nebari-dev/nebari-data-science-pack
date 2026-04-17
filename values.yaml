@@ -52,6 +52,25 @@ nebariapp:
       intervalSeconds: 30
       timeoutSeconds: 5
 
+# =============================================================================
+# Singleuser Idle Culler
+# =============================================================================
+# Configures idle culling inside each user pod. This is separate from the
+# hub-level jupyterhub-idle-culler (configured under jupyterhub.cull) and
+# enables culling even when browser tabs are left open.
+# Matches the defaults from classic nebari.
+singleuserCuller:
+  kernel:
+    cullConnected: true      # Cull kernels even with open browser connections
+    cullIdleTimeout: 90      # Seconds before an idle kernel is culled
+    cullInterval: 30         # How often to check for idle kernels (seconds)
+    cullBusy: false          # Don't cull kernels that are running code
+  terminal:
+    cullInactiveTimeout: 90  # Seconds before an idle terminal is culled
+    cullInterval: 30         # How often to check for idle terminals (seconds)
+  server:
+    shutdownNoActivityTimeout: 90  # Seconds after last kernel/terminal gone before server self-terminates
+
 # Shared storage configuration (disabled - requires RWX storage class)
 sharedStorage:
   enabled: false
@@ -183,26 +202,6 @@ jupyterhub:
     defaultUrl: "/lab"
     extraEnv:
       JUPYTERHUB_SINGLEUSER_APP: "jupyter_server.serverapp.ServerApp"
-
-    # Singleuser-level idle culling configuration.
-    # These settings run inside each user pod and enable culling even when
-    # browser tabs are left open (cull_connected=True). Once all kernels and
-    # terminals are culled, the server process shuts itself down after
-    # shutdown_no_activity_timeout seconds — the hub then sees it as stopped.
-    # Effective total timeout ≈ max(kernel, terminal) + shutdown_no_activity.
-    extraFiles:
-      jupyter-server-config:
-        mountPath: /etc/jupyter/jupyter_server_config.py
-        stringData: |
-          c.MappingKernelManager.cull_connected = True
-          c.MappingKernelManager.cull_idle_timeout = 900
-          c.MappingKernelManager.cull_interval = 300
-          c.MappingKernelManager.cull_busy = False
-
-          c.TerminalManager.cull_inactive_timeout = 900
-          c.TerminalManager.cull_interval = 300
-
-          c.ServerApp.shutdown_no_activity_timeout = 900
 
     # Storage: type "none" required because jhub-apps' JHubSpawner expects volumes
     # as a list, but the subchart's dynamic storage generates a dict.

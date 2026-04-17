@@ -37,11 +37,22 @@ c.KubeSpawner.volumes = [
             "claimName": "claim-{username}",
         },
     },
+    {
+        "name": "singleuser-config",
+        "configMap": {
+            "name": "nebari-data-science-pack-singleuser-config",
+        },
+    },
 ]
 c.KubeSpawner.volume_mounts = [
     {
         "name": "home",
         "mountPath": "/home/jovyan",
+    },
+    {
+        "name": "singleuser-config",
+        "mountPath": "/etc/jupyter/jupyter_server_config.py",
+        "subPath": "jupyter_server_config.py",
     },
 ]
 
