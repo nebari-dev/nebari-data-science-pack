@@ -22,21 +22,45 @@ data:
     # ---------------------------------------------------------------------------
     # Custom idle shutdown monitor
     # ---------------------------------------------------------------------------
-    # Checks kernel and terminal count on an interval. When both reach zero
-    # (after culling), starts a countdown to shut down the server process.
-    # Unlike the built-in mechanism, this ignores WebSocket client connections
-    # and API activity — only actual kernels/terminals keep the server alive.
+    # Monitors kernel/terminal count and real HTTP activity (excluding WebSocket
+    # connections) to decide when to shut down the server. This replaces the
+    # built-in shutdown_no_activity_timeout which is defeated by JupyterLab's
+    # WebSocket reconnect cycle.
+    #
+    # Behavior:
+    #   - Kernels or terminals running → server stays alive
+    #   - No kernels/terminals, but recent HTTP activity (user browsing files,
+    #     navigating JupyterLab) → server stays alive
+    #   - No kernels/terminals AND no HTTP activity for timeout → server stops
+    #
+    # WebSocket connections (the ~5min reconnect cycle from idle browser tabs)
+    # are explicitly excluded from activity tracking.
     _IDLE_SHUTDOWN_TIMEOUT = {{ .Values.singleuserCuller.server.shutdownNoActivityTimeout }}
     _IDLE_CHECK_INTERVAL = 15  # seconds
 
+    import datetime as _dt
+    _last_user_activity = [_dt.datetime.now(_dt.timezone.utc)]
+
     def _start_idle_monitor():
         from tornado.ioloop import IOLoop, PeriodicCallback
+        from tornado.web import RequestHandler
+        from tornado.websocket import WebSocketHandler
         from jupyter_server.serverapp import ServerApp
         import logging
 
         log = logging.getLogger("idle-shutdown")
         app = ServerApp.instance()
         _handle = [None]
+
+        # Patch RequestHandler.prepare to track non-WebSocket HTTP requests
+        _original_prepare = RequestHandler.prepare
+
+        def _tracking_prepare(self):
+            if not isinstance(self, WebSocketHandler):
+                _last_user_activity[0] = _dt.datetime.now(_dt.timezone.utc)
+            return _original_prepare(self)
+
+        RequestHandler.prepare = _tracking_prepare
 
         def _check():
             km = app.kernel_manager
@@ -50,18 +74,29 @@ data:
             except Exception:
                 pass
 
-            if not has_kernels and not has_terminals:
-                if _handle[0] is None:
-                    log.info(
-                        "No kernels or terminals. Server will shut down in %ds.",
-                        _IDLE_SHUTDOWN_TIMEOUT,
-                    )
-                    _handle[0] = IOLoop.current().call_later(
-                        _IDLE_SHUTDOWN_TIMEOUT, app.stop
-                    )
-            else:
+            # Kernels or terminals running — cancel any pending shutdown
+            if has_kernels or has_terminals:
                 if _handle[0] is not None:
                     log.info("Kernel or terminal started, cancelling shutdown.")
+                    IOLoop.current().remove_timeout(_handle[0])
+                    _handle[0] = None
+                return
+
+            # No kernels or terminals — check for recent real HTTP activity
+            now = _dt.datetime.now(_dt.timezone.utc)
+            idle_secs = (now - _last_user_activity[0]).total_seconds()
+
+            if idle_secs >= _IDLE_SHUTDOWN_TIMEOUT:
+                if _handle[0] is None:
+                    log.info(
+                        "No kernels/terminals and no HTTP activity for %ds. "
+                        "Shutting down.", int(idle_secs),
+                    )
+                    IOLoop.current().call_later(0, app.stop)
+                    _handle[0] = True  # prevent duplicate shutdown
+            else:
+                if _handle[0] is not None and _handle[0] is not True:
+                    log.info("HTTP activity detected, cancelling shutdown.")
                     IOLoop.current().remove_timeout(_handle[0])
                     _handle[0] = None
 
