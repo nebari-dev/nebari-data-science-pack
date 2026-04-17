@@ -59,6 +59,9 @@ data:
         return _original_prepare(self)
 
 
+    def _jupyter_server_extension_points():
+        return [{"module": "idle_shutdown_ext"}]
+
     def _load_jupyter_server_extension(serverapp):
         load_jupyter_server_extension(serverapp)
 
