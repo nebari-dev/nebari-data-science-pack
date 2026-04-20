@@ -23,5 +23,13 @@ data:
     import logging
     logging.getLogger('tornado.access').setLevel(logging.DEBUG)
 
-    # Disable jupyter-ai server extension (suspected culler blocker)
-    c.ServerApp.jpserver_extensions = {"jupyter_ai": False}
+    # Disable frontend extensions that poll and prevent idle shutdown
+    import json, os
+    config_dir = "/etc/jupyter/labconfig"
+    os.makedirs(config_dir, exist_ok=True)
+    with open(os.path.join(config_dir, "page_config.json"), "w") as f:
+        json.dump({"disabledExtensions": {
+            "@jupyter-ai/core:plugin": True,
+            "@jupyter-ai/core:inline-completions": True,
+            "jupyterlab-launchpad:plugin": True,
+        }}, f)
