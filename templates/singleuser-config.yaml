@@ -28,18 +28,11 @@ data:
     config_dir = os.path.expanduser("~/.jupyter/labconfig")
     os.makedirs(config_dir, exist_ok=True)
     with open(os.path.join(config_dir, "page_config.json"), "w") as f:
-        # Group A (ENABLED): @jupyter-ai/core, jupyter-matplotlib, jupyterlab-nvdashboard,
-        #   jupyter-leaflet, jupyterlab-nebari-mode, nbdime-jupyterlab,
-        #   jupyterlab-jhub-apps, jupyterlab-gallery, jupyterlab-pioneer,
-        #   jupyterlab_pygments, jupyterlab_code_formatter, dask-labextension
-        # Group B (DISABLED):
+        # Group B1 (ENABLED): jupyterlab-launchpad, @pyviz/jupyterlab_pyviz,
+        #   @jupyter-server/resource-usage, @jupyter-widgets/jupyterlab-manager,
+        #   @jupyter-widgets/jupyterlab-sidecar, @jlab-enhanced/favorites
+        # Group B2 (DISABLED):
         json.dump({"disabledExtensions": {
-            "jupyterlab-launchpad": True,
-            "@pyviz/jupyterlab_pyviz": True,
-            "@jupyter-server/resource-usage": True,
-            "@jupyter-widgets/jupyterlab-manager": True,
-            "@jupyter-widgets/jupyterlab-sidecar": True,
-            "@jlab-enhanced/favorites": True,
             "@jupyterlab-contrib/spellchecker": True,
             "@jupyterhub/jupyter-server-proxy": True,
             "@jupyter-notebook/lab-extension": True,
