@@ -25,7 +25,7 @@ data:
 
     # Disable frontend extensions that poll and prevent idle shutdown
     import json, os
-    config_dir = "/etc/jupyter/labconfig"
+    config_dir = os.path.expanduser("~/.jupyter/labconfig")
     os.makedirs(config_dir, exist_ok=True)
     with open(os.path.join(config_dir, "page_config.json"), "w") as f:
         json.dump({"disabledExtensions": {
