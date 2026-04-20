@@ -18,3 +18,10 @@ data:
 
     # Log all HTTP requests for debugging
     c.ServerApp.log_level = "DEBUG"
+
+    # Enable tornado access logging to see request URLs
+    import logging
+    logging.getLogger('tornado.access').setLevel(logging.DEBUG)
+
+    # Disable jupyter-ai server extension (suspected culler blocker)
+    c.ServerApp.jpserver_extensions["jupyter_ai"] = False
