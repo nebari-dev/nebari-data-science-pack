@@ -24,4 +24,4 @@ data:
     logging.getLogger('tornado.access').setLevel(logging.DEBUG)
 
     # Disable jupyter-ai server extension (suspected culler blocker)
-    c.ServerApp.jpserver_extensions["jupyter_ai"] = False
+    c.ServerApp.jpserver_extensions = {"jupyter_ai": False}
