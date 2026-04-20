@@ -28,8 +28,7 @@ data:
     config_dir = os.path.expanduser("~/.jupyter/labconfig")
     os.makedirs(config_dir, exist_ok=True)
     with open(os.path.join(config_dir, "page_config.json"), "w") as f:
-        # Disable ONLY jupyter-ai and jupyterlab-launchpad (testing gallery alone)
+        # Disable ONLY jupyterlab-launchpad (testing jupyter-ai alone)
         json.dump({"disabledExtensions": {
-            "@jupyter-ai/core": True,
             "jupyterlab-launchpad": True,
         }}, f)
