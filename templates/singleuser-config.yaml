@@ -16,19 +16,6 @@ data:
 
     c.ServerApp.shutdown_no_activity_timeout = {{ .Values.singleuserCuller.server.shutdownNoActivityTimeout }}
 
-    # Log all HTTP requests for debugging
-    c.ServerApp.log_level = "DEBUG"
-
-    # Enable tornado access logging to see request URLs
-    import logging
-    logging.getLogger('tornado.access').setLevel(logging.DEBUG)
-
-    # Disable frontend extensions that poll and prevent idle shutdown
-    import json, os
-    config_dir = os.path.expanduser("~/.jupyter/labconfig")
-    os.makedirs(config_dir, exist_ok=True)
-    with open(os.path.join(config_dir, "page_config.json"), "w") as f:
-        # Disable ONLY jupyterlab-launchpad (testing jupyter-ai alone)
-        json.dump({"disabledExtensions": {
-            "jupyterlab-launchpad": True,
-        }}, f)
+    # Prevent jupyterlab-launchpad polling from resetting the activity clock
+    from jupyterlab_launchpad.handlers import DatabaseHandler
+    DatabaseHandler._track_activity = False
