@@ -28,16 +28,9 @@ data:
     config_dir = os.path.expanduser("~/.jupyter/labconfig")
     os.makedirs(config_dir, exist_ok=True)
     with open(os.path.join(config_dir, "page_config.json"), "w") as f:
-        # Testing ONLY jupyterlab-launchpad enabled
+        # Disable ONLY known offenders - everything else enabled
         json.dump({"disabledExtensions": {
-            "@jupyter-server/resource-usage": True,
-            "@pyviz/jupyterlab_pyviz": True,
-            "@jupyter-widgets/jupyterlab-manager": True,
-            "@jupyter-widgets/jupyterlab-sidecar": True,
-            "@jlab-enhanced/favorites": True,
-            "@jupyterlab-contrib/spellchecker": True,
-            "@jupyterhub/jupyter-server-proxy": True,
-            "@jupyter-notebook/lab-extension": True,
-            "@jupyterlab/git": True,
-            "@jupyterlab/scheduler": True,
+            "@jupyter-ai/core": True,
+            "jupyterlab-launchpad": True,
+            "jupyterlab-gallery": True,
         }}, f)
