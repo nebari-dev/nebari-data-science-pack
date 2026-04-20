@@ -15,7 +15,3 @@ data:
     c.TerminalManager.cull_interval = {{ .Values.singleuserCuller.terminal.cullInterval }}
 
     c.ServerApp.shutdown_no_activity_timeout = {{ .Values.singleuserCuller.server.shutdownNoActivityTimeout }}
-
-    # Prevent jupyterlab-launchpad polling from resetting the activity clock
-    from jupyterlab_launchpad.handlers import DatabaseHandler
-    DatabaseHandler._track_activity = False
