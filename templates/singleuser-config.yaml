@@ -28,9 +28,10 @@ data:
     config_dir = os.path.expanduser("~/.jupyter/labconfig")
     os.makedirs(config_dir, exist_ok=True)
     with open(os.path.join(config_dir, "page_config.json"), "w") as f:
-        # B1a (ENABLED): jupyterlab-launchpad, @pyviz/jupyterlab_pyviz, @jupyter-server/resource-usage
-        # B1b + B2 (DISABLED):
+        # Testing ONLY @jupyter-server/resource-usage enabled (all others disabled)
         json.dump({"disabledExtensions": {
+            "jupyterlab-launchpad": True,
+            "@pyviz/jupyterlab_pyviz": True,
             "@jupyter-widgets/jupyterlab-manager": True,
             "@jupyter-widgets/jupyterlab-sidecar": True,
             "@jlab-enhanced/favorites": True,
