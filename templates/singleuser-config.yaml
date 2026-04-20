@@ -16,6 +16,9 @@ data:
 
     c.ServerApp.shutdown_no_activity_timeout = {{ .Values.singleuserCuller.server.shutdownNoActivityTimeout }}
 
+    # Log all HTTP requests for debugging
+    c.ServerApp.log_level = "DEBUG"
+
     # Disable all server extensions to isolate culler behavior
     c.ServerApp.jpserver_extensions = {
         "dask_labextension": False,
