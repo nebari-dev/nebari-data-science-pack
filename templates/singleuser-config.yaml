@@ -18,24 +18,3 @@ data:
 
     # Log all HTTP requests for debugging
     c.ServerApp.log_level = "DEBUG"
-
-    # Disable all server extensions to isolate culler behavior
-    c.ServerApp.jpserver_extensions = {
-        "dask_labextension": False,
-        "jupyter_ai": False,
-        "jupyter_lsp": False,
-        "jupyter_resource_usage": False,
-        "jupyter_scheduler": False,
-        "jupyter_server_mathjax": False,
-        "jupyter_server_proxy": False,
-        "jupyterlab_code_formatter": False,
-        "jupyterlab_gallery": False,
-        "jupyterlab_git": False,
-        "jupyterlab_nvdashboard": False,
-        "jupyterlab_pioneer": False,
-        "jupyterlab_spellchecker": False,
-        "nbdime": False,
-        "nbgitpuller": False,
-        "nb_nebi_kernels": False,
-        "panel.io.jupyter_server_extension": False,
-    }
