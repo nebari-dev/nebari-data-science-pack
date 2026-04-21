@@ -40,7 +40,7 @@ c.KubeSpawner.volumes = [
     {
         "name": "singleuser-config",
         "configMap": {
-            "name": "nebari-data-science-pack-singleuser-config",
+            "name": "__SINGLEUSER_CONFIG_CM__",  # replaced by Helm template
         },
     },
 ]
