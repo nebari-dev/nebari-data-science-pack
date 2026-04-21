@@ -8,7 +8,7 @@ data:
   00-gateway-auth.py: |
 {{ .Files.Get "config/jupyterhub/00-gateway-auth.py" | indent 4 }}
   01-spawner.py: |
-{{ .Files.Get "config/jupyterhub/01-spawner.py" | replace "__SINGLEUSER_CONFIG_CM__" (printf "%s-singleuser-config" (include "nebari-data-science-pack.name" .)) | indent 4 }}
+{{ .Files.Get "config/jupyterhub/01-spawner.py" | replace "__SINGLEUSER_CONFIG_CM__" (include "nebari-data-science-pack.singleuser-config" .) | indent 4 }}
   02-jhub-apps.py: |
 {{ .Files.Get "config/jupyterhub/02-jhub-apps.py" | indent 4 }}
   03-nebi-envs.py: |

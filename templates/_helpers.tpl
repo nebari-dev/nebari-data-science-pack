@@ -43,6 +43,13 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
 {{/*
+Singleuser config ConfigMap name
+*/}}
+{{- define "nebari-data-science-pack.singleuser-config" -}}
+{{- printf "%s-singleuser-config" (include "nebari-data-science-pack.name" .) -}}
+{{- end }}
+
+{{/*
 Selector labels
 */}}
 {{- define "nebari-data-science-pack.selectorLabels" -}}
