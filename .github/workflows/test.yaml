@@ -26,39 +26,11 @@ jobs:
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
-      # Cache the kindest/node image as a docker tarball. Pulling it from
-      # the registry was the largest variable cost in CI (saw 9s → 130s
-      # depending on runner network), so caching makes runtimes
-      # deterministic. Cache key includes the kind version (which fixes
-      # the node-image tag).
-      - name: Cache kindest/node image
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
-        with:
-          path: /tmp/kind-images/kindest-node.tar
-          key: kindest-node-kind-v0.27.0
-
-      - name: Load cached kindest/node (if present)
-        run: |
-          mkdir -p /tmp/kind-images
-          if [ -f /tmp/kind-images/kindest-node.tar ]; then
-            docker load -i /tmp/kind-images/kindest-node.tar
-          fi
-
       - name: Run e2e tests
         env:
           KIND_KEEP: "1"  # runner is ephemeral, skip teardown
           PYTHONUNBUFFERED: "1"  # stream logs live (no block buffering on non-TTY)
         run: uvx pytest tests/e2e -v --color=yes
-
-      # Save kindest/node tarball after first run so subsequent runs hit
-      # the cache. Skipped on cache hit. Image tag is fixed by kind v0.27.0.
-      - name: Save kindest/node for cache
-        if: success()
-        run: |
-          set -e
-          [ -f /tmp/kind-images/kindest-node.tar ] && exit 0
-          docker images
-          docker save kindest/node:v1.32.2 -o /tmp/kind-images/kindest-node.tar
 
       - name: Hub logs on failure
         if: failure()
