@@ -1,0 +1,98 @@
+{{- if and .Values.sharedStorage.enabled .Values.sharedStorage.nfsServer.enabled }}
+# Backend RWO PVC — the actual disk the NFS server exports over the network.
+# Uses the cluster's default StorageClass (or sharedStorage.nfsServer.storageClass
+# if set) so it works on any provider including Hetzner hcloud-volumes.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "nebari-data-science-pack.fullname" . }}-nfs-storage
+  labels:
+    {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.sharedStorage.nfsServer.storageClass }}
+  storageClassName: {{ .Values.sharedStorage.nfsServer.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.sharedStorage.size }}
+---
+# NFS server Service — exposes NFS (2049), mountd (20048), rpcbind (111).
+# The stable DNS name (<release>-nfs.<namespace>.svc.cluster.local) is used
+# by the PersistentVolume so all nodes can reach the NFS export.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nebari-data-science-pack.fullname" . }}-nfs
+  labels:
+    {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/component: nfs-server
+    {{- include "nebari-data-science-pack.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: nfs
+      port: 2049
+      protocol: TCP
+    - name: mountd
+      port: 20048
+      protocol: TCP
+    - name: rpcbind
+      port: 111
+      protocol: TCP
+---
+# NFS server Deployment — runs quay.io/nebari/volume-nfs in privileged mode,
+# mounts the backend RWO PVC at /exports, and re-exports it as NFS.
+# Single replica: the PVC is RWO so only one pod can write to it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nebari-data-science-pack.fullname" . }}-nfs
+  labels:
+    app.kubernetes.io/component: nfs-server
+    {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: nfs-server
+      {{- include "nebari-data-science-pack.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: nfs-server
+        {{- include "nebari-data-science-pack.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.sharedStorage.nfsServer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.sharedStorage.nfsServer.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.sharedStorage.nfsServer.nodeAffinity }}
+      affinity:
+        nodeAffinity:
+          {{- toYaml .Values.sharedStorage.nfsServer.nodeAffinity | nindent 10 }}
+      {{- end }}
+      containers:
+        - name: nfs-server
+          image: {{ .Values.sharedStorage.nfsServer.image.repository }}:{{ .Values.sharedStorage.nfsServer.image.tag }}
+          ports:
+            - name: nfs
+              containerPort: 2049
+              protocol: TCP
+            - name: mountd
+              containerPort: 20048
+              protocol: TCP
+            - name: rpcbind
+              containerPort: 111
+              protocol: TCP
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: nfs-export
+              mountPath: /exports
+      volumes:
+        - name: nfs-export
+          persistentVolumeClaim:
+            claimName: {{ include "nebari-data-science-pack.fullname" . }}-nfs-storage
+{{- end }}

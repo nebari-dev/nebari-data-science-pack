@@ -71,13 +71,50 @@ singleuserCuller:
   server:
     shutdownNoActivityTimeout: 900  # 15 min — seconds after last kernel/terminal gone before server self-terminates
 
-# Shared storage configuration (disabled - requires RWX storage class)
+# Shared storage — per-group directories mounted at /shared/<group> in user pods.
+# Requires an RWX volume so all user pods can mount it simultaneously.
+# Use nfsServer.enabled=true (below) for an in-cluster NFS solution that works
+# on providers with only RWO storage (e.g. Hetzner hcloud-volumes).
 sharedStorage:
   enabled: false
-  storageClass: ""  # Leave empty to use cluster default
+  # storageClass for the shared PVC when nfsServer.enabled=false.
+  # Leave empty to use the cluster default (must support ReadWriteMany).
+  storageClass: ""
   size: 10Gi
   accessModes:
     - ReadWriteMany
+  # Allowlist of group names to mount as shared directories.
+  # If empty, all groups from the user's Keycloak token are mounted.
+  groups: []
+  # Mount path prefix for shared group directories inside user pods.
+  mountPathPrefix: /shared
+  # In-cluster NFS server — deploys quay.io/nebari/volume-nfs backed by a
+  # single RWO PVC and re-exports it as RWX NFS to all user pods.
+  # Enables shared storage on providers that only have RWO StorageClasses.
+  nfsServer:
+    enabled: false
+    # StorageClass for the NFS server's backend RWO PVC.
+    # Leave empty to use the cluster default.
+    storageClass: ""
+    image:
+      repository: quay.io/nebari/volume-nfs
+      tag: "0.8-repack"
+    # Deploy a DaemonSet that installs nfs-common on every node.
+    # Required on k3s/minimal OS nodes that ship without NFS client tools.
+    installClient: false
+    # Pin the NFS server pod to specific nodes to avoid slow RWO PVC reattachment
+    # when the pod reschedules (detach + reattach can take 30-120s on some providers).
+    # Example for Hetzner worker nodes:
+    #   nodeSelector:
+    #     node.kubernetes.io/instance-type: cpx31
+    nodeSelector: {}
+    # Advanced: full nodeAffinity spec (overrides nodeSelector if both set)
+    nodeAffinity: {}
+    # NFS PV mountOptions. Default (empty) lets kubelet negotiate NFSv4.
+    # Set to ["nfsvers=3"] when running on overlayfs nodes (kind, k3d,
+    # some containerd setups) where the volume-nfs image's NFSv4 export
+    # of `/` is broken — see shared-pvc.yaml for details.
+    mountOptions: []
 
 # =============================================================================
 # Nebi Integration
@@ -123,6 +160,11 @@ jupyterhub:
     nebi-client-id: ""       # Nebi's Keycloak OIDC client ID
     jupyterhub-client-id: "" # JupyterHub's Keycloak OIDC client ID
     nebi-environment-selector: false  # Set true to show nebi workspaces in jhub-apps env dropdown
+    # Shared storage — MUST match top-level sharedStorage.* values exactly.
+    # helm template will fail if sharedStorage.enabled and shared-storage-enabled diverge.
+    shared-storage-enabled: false
+    shared-storage-groups: []       # allowlist; empty = all groups from token
+    shared-storage-mount-prefix: "/shared"
     # jhub-apps (JAppsConfig) overrides.
     # Any key here is set as an attribute on c.JAppsConfig before install_jhub_apps().
     # See https://jhub-apps.nebari.dev/docs/configuration for available options.

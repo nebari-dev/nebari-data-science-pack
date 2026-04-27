@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -15,55 +15,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
 
-      - name: Install k3d
-        run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
-
-      - name: Create k3d cluster
-        run: k3d cluster create test --wait
+      - name: Install kind
+        run: |
+          curl -fsSLo /tmp/kind https://kind.sigs.k8s.io/dl/v0.27.0/kind-linux-amd64
+          sudo install -m 0755 /tmp/kind /usr/local/bin/kind
 
       - name: Install Helm
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+        run: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
-      - name: Update Helm dependencies
-        run: helm dependency update
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
-      - name: Deploy chart
-        run: helm install data-science-pack . --namespace default --set nebariapp.enabled=false
+      - name: Run e2e tests
+        env:
+          KIND_KEEP: "1"  # runner is ephemeral, skip teardown
+          PYTHONUNBUFFERED: "1"  # stream logs live (no block buffering on non-TTY)
+        run: uvx pytest tests/e2e -v --color=yes
 
-      - name: Wait for pods with progress
-        run: |
-          for i in {1..60}; do
-            echo "=== Attempt $i/60 ==="
-            kubectl get pods
-            echo "--- Hub logs (last 10 lines) ---"
-            kubectl logs -l component=hub --tail=10 2>/dev/null || echo "(not ready)"
-            echo "--- Proxy logs (last 5 lines) ---"
-            kubectl logs -l component=proxy --tail=5 2>/dev/null || echo "(not ready)"
-            if kubectl wait --for=condition=ready pod -l component=hub --timeout=5s 2>/dev/null && \
-               kubectl wait --for=condition=ready pod -l component=proxy --timeout=5s 2>/dev/null; then
-              echo "All pods ready!"
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "Timeout waiting for pods"
-          exit 1
-
-      - name: Test JupyterHub endpoint
-        run: |
-          kubectl port-forward svc/proxy-public 8000:80 &
-          PF_PID=$!
-          sleep 5
-          echo "=== Response from /hub/login ==="
-          curl -sS http://localhost:8000/hub/login || true
-          echo ""
-          echo "=== Checking for JupyterHub ==="
-          curl -sS http://localhost:8000/hub/login | grep -q "JupyterHub"
-          RESULT=$?
-          kill $PF_PID 2>/dev/null || true
-          exit $RESULT
-
-      - name: Check hub logs for errors
+      - name: Hub logs on failure
         if: failure()
-        run: kubectl logs -l component=hub --tail=100
+        run: kubectl logs -l component=hub --tail=200 || true

@@ -1,4 +1,73 @@
 {{- if .Values.sharedStorage.enabled }}
+{{- if .Values.sharedStorage.nfsServer.enabled }}
+# Fake StorageClass used only for PV↔PVC binding — no dynamic provisioner.
+# The unique name ensures this PVC only binds to our NFS-backed PV.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ include "nebari-data-science-pack.fullname" . }}-nfs-share
+  labels:
+    {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+  annotations:
+    # Never delete this StorageClass during ArgoCD sync — deleting it unbinds the
+    # shared-storage PVC and disrupts all user pods until manually recreated.
+    argocd.argoproj.io/sync-options: Prune=false
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: Immediate
+---
+# PersistentVolume pointing to the in-cluster NFS server.
+# Uses the service DNS name so it works regardless of which node the pod lands on.
+# The fake StorageClass name ensures this PV only binds to our PVC below.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ include "nebari-data-science-pack.fullname" . }}-nfs-share
+  labels:
+    {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+  annotations:
+    # Never delete this PV during ArgoCD sync — deletion unbinds the PVC and
+    # disrupts all user pods. Data on the backing NFS PVC is NOT lost (Retain
+    # policy) but the platform is down until the PV is manually recreated.
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  capacity:
+    storage: {{ .Values.sharedStorage.size }}
+  storageClassName: {{ include "nebari-data-science-pack.fullname" . }}-nfs-share
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  {{- with .Values.sharedStorage.nfsServer.mountOptions }}
+  # Set sharedStorage.nfsServer.mountOptions=[nfsvers=3] for clusters where
+  # the host filesystem is overlayfs (kind, k3d, some containerd setups):
+  # the volume-nfs image fails to export `/` on overlayfs but leaves it in
+  # the export table with fsid=0, which breaks NFSv4 pseudo-fs traversal.
+  # On regular ext4/xfs nodes the default (NFSv4) works fine — leave empty.
+  mountOptions:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  nfs:
+    server: {{ include "nebari-data-science-pack.fullname" . }}-nfs.{{ .Release.Namespace }}.svc.cluster.local
+    path: /exports
+---
+# Shared-storage PVC — bound to the NFS-backed PV above.
+# User pods mount this PVC with per-group subPaths (/shared/<group>).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shared-storage
+  labels:
+    {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: {{ include "nebari-data-science-pack.fullname" . }}-nfs-share
+  resources:
+    requests:
+      storage: {{ .Values.sharedStorage.size }}
+{{- else }}
+# External RWX StorageClass path — requires the cluster to provide an RWX-capable
+# StorageClass (e.g. EFS, NFS provisioner). Set sharedStorage.nfsServer.enabled=true
+# to use the built-in NFS server instead.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -14,4 +83,5 @@ spec:
   resources:
     requests:
       storage: {{ .Values.sharedStorage.size }}
+{{- end }}
 {{- end }}

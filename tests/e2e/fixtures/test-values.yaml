@@ -1,0 +1,67 @@
+# Test overrides for kind-based e2e suite.
+#
+# - sharedStorage with in-cluster NFS server (works on kind because kind
+#   nodes are full ubuntu containers and the installClient DaemonSet can
+#   apt-install nfs-common).
+# - DummyAuthenticator subclass that derives groups from the username:
+#     login as "alice-data-ml" -> User(name="alice", auth_state.groups=["data","ml"])
+#   Lets feature tests inject group membership without running Keycloak.
+
+sharedStorage:
+  enabled: true
+  size: 1Gi
+  nfsServer:
+    enabled: true
+    installClient: true
+    storageClass: standard
+    # kind nodes are overlayfs — force NFSv3 (see chart docs).
+    mountOptions:
+      - nfsvers=3
+
+jupyterhub:
+  # z2jh's prePuller hooks pre-pull singleuser images on every node before
+  # helm install completes. On a single-node test cluster this is pure
+  # overhead (~30s of helm-install wait) — disable.
+  prePuller:
+    hook:
+      enabled: false
+    continuous:
+      enabled: false
+
+  custom:
+    shared-storage-enabled: true
+    shared-storage-mount-prefix: "/shared"
+
+  hub:
+    config:
+      Authenticator:
+        admin_users:
+          - admin
+        # auth_state encryption is required to persist groups across requests
+        enable_auth_state: true
+
+    # CryptKeeper.keys expects bytes; YAML can't express that directly.
+    # Pass as hex via env — JupyterHub decodes JUPYTERHUB_CRYPT_KEY itself.
+    extraEnv:
+      JUPYTERHUB_CRYPT_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+
+    extraConfig:
+      00-test-auth.py: |
+        from jupyterhub.auth import DummyAuthenticator
+
+        class TestAuth(DummyAuthenticator):
+            """Maps username 'alice-data-ml' to user 'alice' with groups [data, ml]."""
+
+            async def authenticate(self, handler, data):
+                username = data["username"]
+                parts = username.split("-")
+                return {
+                    "name": parts[0],
+                    "auth_state": {"groups": parts[1:]},
+                }
+
+            async def refresh_user(self, user, handler=None):
+                state = await user.get_auth_state() or {}
+                return {"name": user.name, "auth_state": state}
+
+        c.JupyterHub.authenticator_class = TestAuth
