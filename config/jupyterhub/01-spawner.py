@@ -157,21 +157,6 @@ c.KubeSpawner.environment = env
 
 
 # ---------------------------------------------------------------------------
-# Profiles (resource sizing)
-# ---------------------------------------------------------------------------
-# Each profile maps directly to a KubeSpawner profile_list entry.
-# kubespawner_override accepts any valid KubeSpawner trait so deployers can
-# add node_selector, image, extra_resource_limits (GPU), etc. without code changes.
-# When the list is empty, no profile selector is shown (single-instance mode).
-_profiles = get_config("custom.profiles", [])
-if _profiles:
-    c.KubeSpawner.profile_list = _profiles
-    log.info("profiles: loaded %d profile(s): %s", len(_profiles), [p.get("display_name") for p in _profiles])
-else:
-    log.info("profiles: none configured — single-instance mode")
-
-
-# ---------------------------------------------------------------------------
 # Keycloak token exchange helpers (synchronous, shared)
 # ---------------------------------------------------------------------------
 # These synchronous functions are the single implementation of the 3-step
