@@ -446,7 +446,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/b2/a3/e137168c9c44d18eff0376253da9f1e9234d0239e0ee230d2fee6cea8e55/jeepney-0.9.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/2a/c9/c55b27c8a4fa2a266284d9120063370a28b04ff08bcd3b170e24c6ff573b/jhub_apps-2025.11.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/38/64/285f20a31679bf547b75602702f7800e74dbabae36ef324f716c02804753/jupyter-1.1.1-py2.py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/8b/b1/e8b0a5cc04a5542774ff8c84177f4d03f32a58418719740c3affb771622b/jupyterlab_conda_store-2024.11.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/11/bd/c35b56ffe2d9a99782a390515a4e0ea9616fb0cb25d7fa2dc1d52e6e1195/jupyterlab_gallery-0.6.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/02/11/9cae49425dbb3e89a7bb3a4d2e974711ad86baa6cc1f47c9bb4e009adced/jupyterlab_jhub_apps-0.3.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/cc/7e/e0cc8c945693b9e28cc45d45145f2cf1670cca587da5a96f05371d4bf46e/jupyterlab_launchpad-1.0.5-py3-none-any.whl
@@ -925,7 +924,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/b2/a3/e137168c9c44d18eff0376253da9f1e9234d0239e0ee230d2fee6cea8e55/jeepney-0.9.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/2a/c9/c55b27c8a4fa2a266284d9120063370a28b04ff08bcd3b170e24c6ff573b/jhub_apps-2025.11.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/38/64/285f20a31679bf547b75602702f7800e74dbabae36ef324f716c02804753/jupyter-1.1.1-py2.py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/8b/b1/e8b0a5cc04a5542774ff8c84177f4d03f32a58418719740c3affb771622b/jupyterlab_conda_store-2024.11.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/11/bd/c35b56ffe2d9a99782a390515a4e0ea9616fb0cb25d7fa2dc1d52e6e1195/jupyterlab_gallery-0.6.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/02/11/9cae49425dbb3e89a7bb3a4d2e974711ad86baa6cc1f47c9bb4e009adced/jupyterlab_jhub_apps-0.3.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/cc/7e/e0cc8c945693b9e28cc45d45145f2cf1670cca587da5a96f05371d4bf46e/jupyterlab_launchpad-1.0.5-py3-none-any.whl
@@ -4219,18 +4217,6 @@ packages:
   - pkg:pypi/jupyterlab?source=hash-mapping
   size: 7361961
   timestamp: 1724745262468
-- pypi: https://files.pythonhosted.org/packages/8b/b1/e8b0a5cc04a5542774ff8c84177f4d03f32a58418719740c3affb771622b/jupyterlab_conda_store-2024.11.1-py3-none-any.whl
-  name: jupyterlab-conda-store
-  version: 2024.11.1
-  sha256: 43d5da00a6036de0e1a07e75d7d923905a124bcd49e7608becb9da1f529201d7
-  requires_dist:
-  - hatch ; extra == 'dev'
-  - coverage ; extra == 'test'
-  - pytest ; extra == 'test'
-  - pytest-asyncio ; extra == 'test'
-  - pytest-cov ; extra == 'test'
-  - pytest-tornasync ; extra == 'test'
-  requires_python: '>=3.9'
 - conda: https://conda.anaconda.org/conda-forge/noarch/jupyterlab-favorites-3.2.2-pyhd8ed1ab_0.conda
   sha256: 4670c48f656c4ac26442ab49e05c81b500e45ffbb0401888787ceea8f8ff2f41
   md5: 00df6734cc8acc759ca7f59ad64651df
