@@ -19,6 +19,15 @@ sharedStorage:
       - nfsvers=3
 
 jupyterhub:
+  # z2jh's prePuller hooks pre-pull singleuser images on every node before
+  # helm install completes. On a single-node test cluster this is pure
+  # overhead (~30s of helm-install wait) — disable.
+  prePuller:
+    hook:
+      enabled: false
+    continuous:
+      enabled: false
+
   custom:
     shared-storage-enabled: true
     shared-storage-mount-prefix: "/shared"
