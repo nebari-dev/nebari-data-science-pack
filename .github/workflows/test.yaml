@@ -51,14 +51,14 @@ jobs:
         run: uvx pytest tests/e2e -v --color=yes
 
       # Save kindest/node tarball after first run so subsequent runs hit
-      # the cache. Skipped on cache hit to avoid useless rewrites.
+      # the cache. Skipped on cache hit. Image tag is fixed by kind v0.27.0.
       - name: Save kindest/node for cache
         if: success()
         run: |
-          if [ ! -f /tmp/kind-images/kindest-node.tar ]; then
-            img=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep '^kindest/node:' | head -1)
-            [ -n "$img" ] && docker save "$img" -o /tmp/kind-images/kindest-node.tar
-          fi
+          set -e
+          [ -f /tmp/kind-images/kindest-node.tar ] && exit 0
+          docker images
+          docker save kindest/node:v1.32.2 -o /tmp/kind-images/kindest-node.tar
 
       - name: Hub logs on failure
         if: failure()
