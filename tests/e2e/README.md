@@ -1,6 +1,11 @@
 # e2e tests
 
-Spins up a k3d cluster, helm-installs the chart, runs behavioral tests against the live hub.
+Spins up a kind cluster, helm-installs the chart, runs behavioral tests against the live hub.
+
+kind (not k3d) — kind nodes are full ubuntu containers, so the chart's
+`installClient` DaemonSet (apt-based) can install nfs-common, which is
+needed for the in-cluster NFS server feature. k3d's busybox-on-scratch
+nodes have no package manager.
 
 ## Run
 
@@ -9,14 +14,14 @@ Spins up a k3d cluster, helm-installs the chart, runs behavioral tests against t
 uvx pytest tests/e2e -v
 
 # reuse an existing cluster (skip create/delete)
-K3D_CLUSTER=k3d-nebari-dev uvx pytest tests/e2e -v
+KIND_CLUSTER=my-cluster uvx pytest tests/e2e -v
 
 # keep the cluster after the run
-K3D_KEEP=1 uvx pytest tests/e2e -v
+KIND_KEEP=1 uvx pytest tests/e2e -v
 ```
 
 Logs stream live (configured in `tests/e2e/pytest.ini`).
 
 ## Requirements
 
-`k3d`, `helm`, `kubectl` on `PATH`.
+`kind`, `helm`, `kubectl` on `PATH`.

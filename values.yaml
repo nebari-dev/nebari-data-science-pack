@@ -110,6 +110,11 @@ sharedStorage:
     nodeSelector: {}
     # Advanced: full nodeAffinity spec (overrides nodeSelector if both set)
     nodeAffinity: {}
+    # NFS PV mountOptions. Default (empty) lets kubelet negotiate NFSv4.
+    # Set to ["nfsvers=3"] when running on overlayfs nodes (kind, k3d,
+    # some containerd setups) where the volume-nfs image's NFSv4 export
+    # of `/` is broken — see shared-pvc.yaml for details.
+    mountOptions: []
 
 # =============================================================================
 # Nebi Integration

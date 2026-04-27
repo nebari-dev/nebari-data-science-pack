@@ -15,8 +15,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
 
-      - name: Install k3d
-        run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+      - name: Install kind
+        run: |
+          curl -fsSLo /tmp/kind https://kind.sigs.k8s.io/dl/v0.27.0/kind-linux-amd64
+          sudo install -m 0755 /tmp/kind /usr/local/bin/kind
 
       - name: Install Helm
         run: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
@@ -26,7 +28,7 @@ jobs:
 
       - name: Run e2e tests
         env:
-          K3D_KEEP: "1"  # runner is ephemeral, skip teardown
+          KIND_KEEP: "1"  # runner is ephemeral, skip teardown
           PYTHONUNBUFFERED: "1"  # stream logs live (no block buffering on non-TTY)
         run: uvx pytest tests/e2e -v --color=yes
 

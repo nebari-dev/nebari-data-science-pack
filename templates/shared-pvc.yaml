@@ -36,6 +36,15 @@ spec:
   accessModes:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
+  {{- with .Values.sharedStorage.nfsServer.mountOptions }}
+  # Set sharedStorage.nfsServer.mountOptions=[nfsvers=3] for clusters where
+  # the host filesystem is overlayfs (kind, k3d, some containerd setups):
+  # the volume-nfs image fails to export `/` on overlayfs but leaves it in
+  # the export table with fsid=0, which breaks NFSv4 pseudo-fs traversal.
+  # On regular ext4/xfs nodes the default (NFSv4) works fine — leave empty.
+  mountOptions:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   nfs:
     server: {{ include "nebari-data-science-pack.fullname" . }}-nfs.{{ .Release.Namespace }}.svc.cluster.local
     path: /exports
