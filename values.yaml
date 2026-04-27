@@ -52,6 +52,25 @@ nebariapp:
       intervalSeconds: 30
       timeoutSeconds: 5
 
+# =============================================================================
+# Singleuser Idle Culler
+# =============================================================================
+# Configures idle culling inside each user pod. This is separate from the
+# hub-level jupyterhub-idle-culler (configured under jupyterhub.cull) and
+# enables culling even when browser tabs are left open.
+# Matches the defaults from classic nebari.
+singleuserCuller:
+  kernel:
+    cullConnected: true      # Cull kernels even with open browser connections
+    cullIdleTimeout: 900     # 15 min — seconds before an idle kernel is culled
+    cullInterval: 300        # 5 min — how often to check for idle kernels (seconds)
+    cullBusy: false          # Don't cull kernels that are running code
+  terminal:
+    cullInactiveTimeout: 900 # 15 min — seconds before an idle terminal is culled
+    cullInterval: 300        # 5 min — how often to check for idle terminals (seconds)
+  server:
+    shutdownNoActivityTimeout: 900  # 15 min — seconds after last kernel/terminal gone before server self-terminates
+
 # Shared storage — per-group directories mounted at /shared/<group> in user pods.
 # Requires an RWX volume so all user pods can mount it simultaneously.
 # Use nfsServer.enabled=true (below) for an in-cluster NFS solution that works
@@ -268,5 +287,5 @@ jupyterhub:
 
   cull:
     enabled: true
-    timeout: 3600
-    every: 300
+    timeout: 1800     # 30 min — matches classic nebari
+    every: 600        # 10 min — polling interval

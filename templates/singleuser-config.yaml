@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nebari-data-science-pack.singleuser-config" . }}
+  labels:
+    {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+data:
+  jupyter_server_config.py: |
+    c.MappingKernelManager.cull_connected = {{ if .Values.singleuserCuller.kernel.cullConnected }}True{{ else }}False{{ end }}
+    c.MappingKernelManager.cull_idle_timeout = {{ .Values.singleuserCuller.kernel.cullIdleTimeout }}
+    c.MappingKernelManager.cull_interval = {{ .Values.singleuserCuller.kernel.cullInterval }}
+    c.MappingKernelManager.cull_busy = {{ if .Values.singleuserCuller.kernel.cullBusy }}True{{ else }}False{{ end }}
+
+    c.TerminalManager.cull_inactive_timeout = {{ .Values.singleuserCuller.terminal.cullInactiveTimeout }}
+    c.TerminalManager.cull_interval = {{ .Values.singleuserCuller.terminal.cullInterval }}
+
+    c.ServerApp.shutdown_no_activity_timeout = {{ .Values.singleuserCuller.server.shutdownNoActivityTimeout }}

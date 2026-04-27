@@ -38,11 +38,22 @@ c.KubeSpawner.volumes = [
             "claimName": "claim-{username}",
         },
     },
+    {
+        "name": "singleuser-config",
+        "configMap": {
+            "name": "__SINGLEUSER_CONFIG_CM__",  # replaced by Helm template
+        },
+    },
 ]
 c.KubeSpawner.volume_mounts = [
     {
         "name": "home",
         "mountPath": "/home/jovyan",
+    },
+    {
+        "name": "singleuser-config",
+        "mountPath": "/etc/jupyter/jupyter_server_config.py",
+        "subPath": "jupyter_server_config.py",
     },
 ]
 
