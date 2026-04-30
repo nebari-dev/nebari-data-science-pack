@@ -147,6 +147,26 @@ def _wait_for_url(url, timeout_s):
 # ---------------------------------------------------------------------------
 
 
+class PathStat:
+    """Decoded `stat` output for one path inside a singleuser pod.
+
+    Tests assert against typed fields rather than parsing `stat` strings:
+
+        s = u.stat("/shared/data")
+        assert s.mode == 0o2775 and s.gid == USERS_GID
+    """
+
+    __slots__ = ("mode", "uid", "gid")
+
+    def __init__(self, mode, uid, gid):
+        self.mode = mode  # int, e.g. 0o2775
+        self.uid = uid    # int
+        self.gid = gid    # int
+
+    def __repr__(self):
+        return f"PathStat(mode=0o{self.mode:o}, uid={self.uid}, gid={self.gid})"
+
+
 class SpawnedUser:
     """Handle to a logged-in JupyterHub user with a running singleuser pod."""
 
@@ -162,11 +182,24 @@ class SpawnedUser:
             return _kubectl_exec(*flags, "su", "-", user, "-c", " ".join(cmd))
         return _kubectl_exec(*flags, *cmd)
 
+    def stat(self, path):
+        """Return PathStat for `path` inside the pod. Fails the test if the
+        path is missing — use `path_exists()` first if absence is expected."""
+        rc, out = self.exec("stat", "-c", "%a %u %g", path)
+        if rc != 0:
+            pytest.fail(f"stat {path} on pod {self.pod} failed: {out}")
+        mode_s, uid_s, gid_s = out.split()
+        return PathStat(int(mode_s, 8), int(uid_s), int(gid_s))
+
+    def path_exists(self, path):
+        rc, _ = self.exec("test", "-e", path)
+        return rc == 0
+
 
 def _kubectl_exec(*args):
     cp = subprocess.run(["kubectl", "exec", *args],
                         capture_output=True, text=True)
-    return cp.returncode, (cp.stdout or "") + (cp.stderr or "")
+    return cp.returncode, ((cp.stdout or "") + (cp.stderr or "")).strip()
 
 
 @pytest.fixture
