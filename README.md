@@ -58,6 +58,26 @@ make down
 
 See `values.yaml` for all configuration options. The chart wraps the [JupyterHub Helm chart](https://z2jh.jupyter.org/) - all `jupyterhub.*` values are passed through.
 
+## Shared Storage
+
+Per-group shared directories (`/shared/<group>` in every user pod) need a
+ReadWriteMany `StorageClass` on the cluster. On NIC-managed clusters that's
+[Longhorn](https://longhorn.io/), installed by NIC's storage layer:
+
+```yaml
+sharedStorage:
+  enabled: true
+  storageClass: longhorn
+  size: 100Gi
+```
+
+For clusters where NIC has not yet wired up an RWX class (local dev, current
+GCP/Azure paths), the chart includes a transitional
+`sharedStorage.nfsServer.enabled=true` mode that runs an in-cluster NFS
+server pod. It depends on the `quay.io/nebari/volume-nfs` workaround image
+and is tracked for removal in
+[issue #29](https://github.com/nebari-dev/nebari-data-science-pack/issues/29).
+
 ## Architecture
 
 ```

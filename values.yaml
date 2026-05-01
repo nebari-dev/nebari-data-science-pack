@@ -71,13 +71,62 @@ singleuserCuller:
   server:
     shutdownNoActivityTimeout: 900  # 15 min — seconds after last kernel/terminal gone before server self-terminates
 
-# Shared storage configuration (disabled - requires RWX storage class)
+# Shared storage — per-group directories mounted at /shared/<group> in user pods.
+# Requires an RWX StorageClass on the cluster.
+#
+# In NIC-managed clusters that StorageClass is `longhorn`, installed by NIC's
+# storage layer (hetzner, aws, existing providers). Set
+# `sharedStorage.storageClass: longhorn` and leave `nfsServer.enabled=false`.
+#
+# `nfsServer.enabled=true` deploys an in-cluster NFS server pod
+# (quay.io/nebari/volume-nfs) that re-exports a RWO PVC as RWX. It exists as
+# a transitional fallback for environments where NIC has not yet wired up an
+# RWX class (e.g. local dev, GCP, Azure). The image is a manifest-schema
+# repack of an abandoned upstream — tracked for removal in issue #29.
 sharedStorage:
   enabled: false
-  storageClass: ""  # Leave empty to use cluster default
+  # StorageClass for the shared PVC when nfsServer.enabled=false.
+  # Leave empty to use the cluster default (must support ReadWriteMany).
+  storageClass: ""
   size: 10Gi
   accessModes:
     - ReadWriteMany
+  # Allowlist of group names to mount as shared directories.
+  # If empty, all groups from the user's Keycloak token are mounted.
+  groups: []
+  # Mount path prefix for shared group directories inside user pods.
+  mountPathPrefix: /shared
+  # Transitional in-cluster NFS server. Prefer an external RWX StorageClass
+  # (see RECOMMENDED list above). Tracked for removal in issue #29.
+  nfsServer:
+    enabled: false
+    # StorageClass for the NFS server's backend RWO PVC.
+    # Leave empty to use the cluster default.
+    storageClass: ""
+    # NOTE: 0.8-repack is a manifest-schema repack of the abandoned
+    # gcr.io/google-containers/nfs-server:0.8 image (see
+    # nebari-dev/nebari-docker-images#230). We carry it for clusters that
+    # cannot provide RWX storage natively; on NIC-managed clusters set
+    # `sharedStorage.storageClass: longhorn` and leave nfsServer disabled.
+    image:
+      repository: quay.io/nebari/volume-nfs
+      tag: "0.8-repack"
+    # Deploy a DaemonSet that installs nfs-common on every node.
+    # Required on k3s/minimal OS nodes that ship without NFS client tools.
+    installClient: false
+    # Pin the NFS server pod to specific nodes to avoid slow RWO PVC reattachment
+    # when the pod reschedules (detach + reattach can take 30-120s on some providers).
+    # Example for Hetzner worker nodes:
+    #   nodeSelector:
+    #     node.kubernetes.io/instance-type: cpx31
+    nodeSelector: {}
+    # Advanced: full nodeAffinity spec (overrides nodeSelector if both set)
+    nodeAffinity: {}
+    # NFS PV mountOptions. Default (empty) lets kubelet negotiate NFSv4.
+    # Set to ["nfsvers=3"] when running on overlayfs nodes (kind, k3d,
+    # some containerd setups) where the volume-nfs image's NFSv4 export
+    # of `/` is broken — see shared-pvc.yaml for details.
+    mountOptions: []
 
 # =============================================================================
 # Nebi Integration
@@ -123,6 +172,11 @@ jupyterhub:
     nebi-client-id: ""       # Nebi's Keycloak OIDC client ID
     jupyterhub-client-id: "" # JupyterHub's Keycloak OIDC client ID
     nebi-environment-selector: false  # Set true to show nebi workspaces in jhub-apps env dropdown
+    # Shared storage — MUST match top-level sharedStorage.* values exactly.
+    # helm template will fail if sharedStorage.enabled and shared-storage-enabled diverge.
+    shared-storage-enabled: false
+    shared-storage-groups: []       # allowlist; empty = all groups from token
+    shared-storage-mount-prefix: "/shared"
     # jhub-apps (JAppsConfig) overrides.
     # Any key here is set as an attribute on c.JAppsConfig before install_jhub_apps().
     # See https://jhub-apps.nebari.dev/docs/configuration for available options.

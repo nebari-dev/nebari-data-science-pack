@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -15,55 +15,58 @@ jobs:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
 
-      - name: Install k3d
-        run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
-
-      - name: Create k3d cluster
-        run: k3d cluster create test --wait
+      - name: Install kind
+        run: |
+          curl -fsSLo /tmp/kind https://kind.sigs.k8s.io/dl/v0.27.0/kind-linux-amd64
+          sudo install -m 0755 /tmp/kind /usr/local/bin/kind
 
       - name: Install Helm
+        run: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      # Singleuser image is multi-GB and is the dominant cold-start cost
+      # (~73s pulled in-cluster during the first test). Cache the tar across
+      # CI runs and side-load it into kind so kubelet never goes to the
+      # registry. Cache key is the image ref so a `values.yaml` bump
+      # invalidates automatically.
+      - name: Resolve singleuser image ref
+        id: img
         run: |
-          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          REF=$(yq -r '.jupyterhub.singleuser.image | .name + ":" + .tag' values.yaml)
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "tar=/tmp/singleuser.tar" >> "$GITHUB_OUTPUT"
 
-      - name: Update Helm dependencies
-        run: helm dependency update
+      - name: Cache singleuser image
+        id: img-cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+        with:
+          path: ${{ steps.img.outputs.tar }}
+          key: singleuser-${{ steps.img.outputs.ref }}
 
-      - name: Deploy chart
-        run: helm install data-science-pack . --namespace default --set nebariapp.enabled=false
-
-      - name: Wait for pods with progress
+      - name: Pull + save singleuser image (cache miss only)
+        if: steps.img-cache.outputs.cache-hit != 'true'
         run: |
-          for i in {1..60}; do
-            echo "=== Attempt $i/60 ==="
-            kubectl get pods
-            echo "--- Hub logs (last 10 lines) ---"
-            kubectl logs -l component=hub --tail=10 2>/dev/null || echo "(not ready)"
-            echo "--- Proxy logs (last 5 lines) ---"
-            kubectl logs -l component=proxy --tail=5 2>/dev/null || echo "(not ready)"
-            if kubectl wait --for=condition=ready pod -l component=hub --timeout=5s 2>/dev/null && \
-               kubectl wait --for=condition=ready pod -l component=proxy --timeout=5s 2>/dev/null; then
-              echo "All pods ready!"
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "Timeout waiting for pods"
-          exit 1
+          docker pull "${{ steps.img.outputs.ref }}"
+          docker save "${{ steps.img.outputs.ref }}" -o "${{ steps.img.outputs.tar }}"
 
-      - name: Test JupyterHub endpoint
-        run: |
-          kubectl port-forward svc/proxy-public 8000:80 &
-          PF_PID=$!
-          sleep 5
-          echo "=== Response from /hub/login ==="
-          curl -sS http://localhost:8000/hub/login || true
-          echo ""
-          echo "=== Checking for JupyterHub ==="
-          curl -sS http://localhost:8000/hub/login | grep -q "JupyterHub"
-          RESULT=$?
-          kill $PF_PID 2>/dev/null || true
-          exit $RESULT
+      # Pre-create the cluster here (instead of letting the pytest fixture
+      # do it) so we can side-load the cached image before any pod is
+      # scheduled. The fixture's ensure_cluster() reuses an existing one.
+      - name: Create kind cluster
+        run: kind create cluster --name nbtest-e2e --wait 60s
 
-      - name: Check hub logs for errors
+      - name: Side-load singleuser image into kind node
+        run: kind load image-archive "${{ steps.img.outputs.tar }}" --name nbtest-e2e
+
+      - name: Run e2e tests
+        env:
+          KIND_CLUSTER: "nbtest-e2e"  # reuse the cluster created above
+          KIND_KEEP: "1"  # runner is ephemeral, skip teardown
+          PYTHONUNBUFFERED: "1"  # stream logs live (no block buffering on non-TTY)
+        run: uvx pytest tests/e2e -v --color=yes
+
+      - name: Hub logs on failure
         if: failure()
-        run: kubectl logs -l component=hub --tail=100
+        run: kubectl logs -l component=hub --tail=200 || true
