@@ -73,11 +73,24 @@ singleuserCuller:
 
 # Shared storage — per-group directories mounted at /shared/<group> in user pods.
 # Requires an RWX volume so all user pods can mount it simultaneously.
-# Use nfsServer.enabled=true (below) for an in-cluster NFS solution that works
-# on providers with only RWO storage (e.g. Hetzner hcloud-volumes).
+#
+# RECOMMENDED: bring your own RWX StorageClass and set `storageClass` below.
+# Examples by provider:
+#   - Hetzner / on-prem  : longhorn (provisioned by NIC's storage layer)
+#   - AWS                : EFS CSI driver
+#   - GCP                : Filestore CSI driver
+#   - Azure              : Azure Files CSI driver
+#   - Generic (have NFS) : nfs-subdir-external-provisioner against your NFS export
+#
+# FALLBACK: `nfsServer.enabled=true` deploys an in-cluster NFS server pod
+# (quay.io/nebari/volume-nfs) that re-exports a single RWO PVC as RWX. This
+# is a transitional workaround for clusters with no RWX option — see issue
+# #29; the image is a repack of an abandoned upstream and we plan to remove
+# this code path once an external alternative is documented for every
+# supported environment.
 sharedStorage:
   enabled: false
-  # storageClass for the shared PVC when nfsServer.enabled=false.
+  # StorageClass for the shared PVC when nfsServer.enabled=false.
   # Leave empty to use the cluster default (must support ReadWriteMany).
   storageClass: ""
   size: 10Gi
@@ -88,14 +101,18 @@ sharedStorage:
   groups: []
   # Mount path prefix for shared group directories inside user pods.
   mountPathPrefix: /shared
-  # In-cluster NFS server — deploys quay.io/nebari/volume-nfs backed by a
-  # single RWO PVC and re-exports it as RWX NFS to all user pods.
-  # Enables shared storage on providers that only have RWO StorageClasses.
+  # Transitional in-cluster NFS server. Prefer an external RWX StorageClass
+  # (see RECOMMENDED list above). Tracked for removal in issue #29.
   nfsServer:
     enabled: false
     # StorageClass for the NFS server's backend RWO PVC.
     # Leave empty to use the cluster default.
     storageClass: ""
+    # NOTE: 0.8-repack is a manifest-schema repack of the abandoned
+    # gcr.io/google-containers/nfs-server:0.8 image (see
+    # nebari-dev/nebari-docker-images#230). We carry it for clusters that
+    # cannot provide RWX storage natively; new deployments should use
+    # `sharedStorage.storageClass` instead and leave `nfsServer.enabled=false`.
     image:
       repository: quay.io/nebari/volume-nfs
       tag: "0.8-repack"

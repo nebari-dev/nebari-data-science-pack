@@ -58,6 +58,35 @@ make down
 
 See `values.yaml` for all configuration options. The chart wraps the [JupyterHub Helm chart](https://z2jh.jupyter.org/) - all `jupyterhub.*` values are passed through.
 
+## Shared Storage
+
+Per-group shared directories (`/shared/<group>` in every user pod) need a
+ReadWriteMany volume. The chart does **not** ship a storage backend by default
+— bring your own RWX `StorageClass` and point the chart at it:
+
+```yaml
+sharedStorage:
+  enabled: true
+  storageClass: <your-rwx-class>   # e.g. longhorn, efs-sc, azurefile-csi
+  size: 100Gi
+```
+
+Recommended options by environment:
+
+| Environment | RWX backend | Notes |
+|-------------|-------------|-------|
+| Hetzner / on-prem | [Longhorn](https://longhorn.io/) | Provisioned by NIC's storage layer |
+| AWS | [EFS CSI driver](https://github.com/kubernetes-sigs/aws-efs-csi-driver) | RWX via EFS |
+| GCP | [Filestore CSI driver](https://cloud.google.com/filestore) | RWX via Filestore |
+| Azure | [Azure Files CSI driver](https://github.com/kubernetes-sigs/azurefile-csi-driver) | RWX via Azure Files |
+| Generic (have NFS) | [`nfs-subdir-external-provisioner`](https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner) | Point it at any existing NFS export |
+
+For clusters that cannot provide an RWX class natively, the chart includes a
+transitional `sharedStorage.nfsServer.enabled=true` mode that runs an
+in-cluster NFS server pod. This is being tracked for removal in
+[issue #29](https://github.com/nebari-dev/nebari-data-science-pack/issues/29) —
+prefer one of the options above for new deployments.
+
 ## Architecture
 
 ```
