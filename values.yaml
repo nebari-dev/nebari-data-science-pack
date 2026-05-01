@@ -72,22 +72,17 @@ singleuserCuller:
     shutdownNoActivityTimeout: 900  # 15 min — seconds after last kernel/terminal gone before server self-terminates
 
 # Shared storage — per-group directories mounted at /shared/<group> in user pods.
-# Requires an RWX volume so all user pods can mount it simultaneously.
+# Requires an RWX StorageClass on the cluster.
 #
-# RECOMMENDED: bring your own RWX StorageClass and set `storageClass` below.
-# Examples by provider:
-#   - Hetzner / on-prem  : longhorn (provisioned by NIC's storage layer)
-#   - AWS                : EFS CSI driver
-#   - GCP                : Filestore CSI driver
-#   - Azure              : Azure Files CSI driver
-#   - Generic (have NFS) : nfs-subdir-external-provisioner against your NFS export
+# In NIC-managed clusters that StorageClass is `longhorn`, installed by NIC's
+# storage layer (hetzner, aws, existing providers). Set
+# `sharedStorage.storageClass: longhorn` and leave `nfsServer.enabled=false`.
 #
-# FALLBACK: `nfsServer.enabled=true` deploys an in-cluster NFS server pod
-# (quay.io/nebari/volume-nfs) that re-exports a single RWO PVC as RWX. This
-# is a transitional workaround for clusters with no RWX option — see issue
-# #29; the image is a repack of an abandoned upstream and we plan to remove
-# this code path once an external alternative is documented for every
-# supported environment.
+# `nfsServer.enabled=true` deploys an in-cluster NFS server pod
+# (quay.io/nebari/volume-nfs) that re-exports a RWO PVC as RWX. It exists as
+# a transitional fallback for environments where NIC has not yet wired up an
+# RWX class (e.g. local dev, GCP, Azure). The image is a manifest-schema
+# repack of an abandoned upstream — tracked for removal in issue #29.
 sharedStorage:
   enabled: false
   # StorageClass for the shared PVC when nfsServer.enabled=false.
@@ -111,8 +106,8 @@ sharedStorage:
     # NOTE: 0.8-repack is a manifest-schema repack of the abandoned
     # gcr.io/google-containers/nfs-server:0.8 image (see
     # nebari-dev/nebari-docker-images#230). We carry it for clusters that
-    # cannot provide RWX storage natively; new deployments should use
-    # `sharedStorage.storageClass` instead and leave `nfsServer.enabled=false`.
+    # cannot provide RWX storage natively; on NIC-managed clusters set
+    # `sharedStorage.storageClass: longhorn` and leave nfsServer disabled.
     image:
       repository: quay.io/nebari/volume-nfs
       tag: "0.8-repack"
