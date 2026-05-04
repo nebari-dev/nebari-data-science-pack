@@ -221,9 +221,7 @@ externalAuth:
   enabled: false
   brokerURL: ""
   providers: []
-  envVarMap:
-    github: GITHUB_TOKEN
-    testoidc: TESTOIDC_TOKEN
+  envVarMap: {}
   timeoutSeconds: 10
 
 # =============================================================================

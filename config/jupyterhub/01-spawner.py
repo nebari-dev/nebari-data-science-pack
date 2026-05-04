@@ -19,11 +19,37 @@ from z2jh import get_config
 
 log = logging.getLogger(__name__)
 
-external_auth_enabled = "__EXTERNAL_AUTH_ENABLED__".lower() == "true"
-external_auth_broker_url = "__EXTERNAL_AUTH_BROKER_URL__".strip()
-external_auth_providers = json.loads(r'''__EXTERNAL_AUTH_PROVIDERS_JSON__''')
-external_auth_env_var_map = json.loads(r'''__EXTERNAL_AUTH_ENV_VAR_MAP_JSON__''')
-external_auth_timeout_seconds = int("__EXTERNAL_AUTH_TIMEOUT_SECONDS__" or "10")
+
+def _external_auth_unrendered(value):
+    """Return true for Helm placeholders in unit-test/import contexts."""
+    return str(value).startswith("__EXTERNAL_AUTH_")
+
+
+def _external_auth_json(value, default):
+    if _external_auth_unrendered(value):
+        return default
+    return json.loads(value)
+
+
+def _external_auth_int(value, default):
+    if _external_auth_unrendered(value) or not str(value).strip():
+        return default
+    return int(value)
+
+
+external_auth_enabled = (
+    False
+    if _external_auth_unrendered("__EXTERNAL_AUTH_ENABLED__")
+    else "__EXTERNAL_AUTH_ENABLED__".lower() == "true"
+)
+external_auth_broker_url = (
+    ""
+    if _external_auth_unrendered("__EXTERNAL_AUTH_BROKER_URL__")
+    else "__EXTERNAL_AUTH_BROKER_URL__".strip()
+)
+external_auth_providers = _external_auth_json(r'''__EXTERNAL_AUTH_PROVIDERS_JSON__''', [])
+external_auth_env_var_map = _external_auth_json(r'''__EXTERNAL_AUTH_ENV_VAR_MAP_JSON__''', {})
+external_auth_timeout_seconds = _external_auth_int("__EXTERNAL_AUTH_TIMEOUT_SECONDS__", 10)
 
 
 # ---------------------------------------------------------------------------
