@@ -8,12 +8,18 @@ import os
 import urllib.error
 import urllib.request
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 from z2jh import get_config
 
 log = logging.getLogger(__name__)
+
+external_auth_enabled = "__EXTERNAL_AUTH_ENABLED__".lower() == "true"
+external_auth_broker_url = "__EXTERNAL_AUTH_BROKER_URL__".strip()
+external_auth_providers = json.loads(r'''__EXTERNAL_AUTH_PROVIDERS_JSON__''')
+external_auth_env_var_map = json.loads(r'''__EXTERNAL_AUTH_ENV_VAR_MAP_JSON__''')
+external_auth_timeout_seconds = int("__EXTERNAL_AUTH_TIMEOUT_SECONDS__" or "10")
 
 
 # ---------------------------------------------------------------------------
@@ -727,6 +733,54 @@ async def _setup_nss_wrapper(spawner, username, groups):
 
 
 # ---------------------------------------------------------------------------
+# External auth pack integration
+# ---------------------------------------------------------------------------
+
+def _external_auth_provider_token(broker_url, provider, bearer_token):
+    """Fetch one provider token from the external-auth broker."""
+    req = Request(
+        f"{broker_url.rstrip('/')}/external-auth/{quote(provider)}/token",
+        headers={"Authorization": f"Bearer {bearer_token}", "Accept": "application/json"},
+        method="GET",
+    )
+    with urlopen(req, timeout=external_auth_timeout_seconds) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+async def _external_auth_pre_spawn_hook(spawner, auth_state):
+    """Deliver external-auth provider tokens from configured contract fields."""
+    if not external_auth_enabled or not external_auth_broker_url:
+        return
+    access_token = (auth_state or {}).get("access_token")
+    if not access_token:
+        log.debug("external-auth: no access_token for %s; skipping", spawner.user.name)
+        return
+
+    providers = external_auth_providers or list(external_auth_env_var_map)
+    for provider in providers:
+        try:
+            payload = await asyncio.to_thread(
+                _external_auth_provider_token,
+                external_auth_broker_url,
+                provider,
+                access_token,
+            )
+        except urllib.error.HTTPError as exc:
+            log.debug("external-auth: token request failed provider=%s status=%s", provider, exc.code)
+            continue
+        except Exception as exc:
+            log.debug("external-auth: token request failed provider=%s error=%s", provider, exc)
+            continue
+
+        token = str(payload.get("access_token", "")).strip()
+        if payload.get("status") != "token_valid" or not token:
+            continue
+
+        env_var = str(external_auth_env_var_map.get(provider) or f"{provider.upper()}_TOKEN").strip()
+        spawner.environment = {**spawner.environment, env_var: token}
+
+
+# ---------------------------------------------------------------------------
 # Pre-spawn hook orchestrator
 # ---------------------------------------------------------------------------
 # Chains the three independent concerns: Nebi auto-auth, shared storage mounts,
@@ -790,6 +844,12 @@ async def _pre_spawn_hook(spawner):
         log.info("pre-spawn: NSS wrapper configured for %s", username)
     except Exception:
         log.exception("pre-spawn: NSS wrapper setup FAILED for %s", username)
+
+    # 5. External auth provider tokens (non-fatal)
+    try:
+        await _external_auth_pre_spawn_hook(spawner, auth_state)
+    except Exception:
+        log.exception("pre-spawn: external-auth setup FAILED for %s", username)
 
     log.info("pre-spawn: hook complete for user %s", username)
 
