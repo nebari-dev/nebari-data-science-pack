@@ -194,7 +194,7 @@ jupyterhub:
     # Custom Nebari hub image with jhub-apps pre-installed
     image:
       name: quay.io/nebari/nebari-data-science-pack-jupyterhub
-      tag: "sha-443d1fe"
+      tag: "sha-8f2e545"
 
     config:
       JupyterHub:
@@ -252,7 +252,7 @@ jupyterhub:
   singleuser:
     image:
       name: quay.io/nebari/nebari-data-science-pack-jupyterlab
-      tag: "sha-443d1fe"
+      tag: "sha-8f2e545"
     defaultUrl: "/lab"
     extraEnv:
       JUPYTERHUB_SINGLEUSER_APP: "jupyter_server.serverapp.ServerApp"
