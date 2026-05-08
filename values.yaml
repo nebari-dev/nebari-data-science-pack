@@ -210,7 +210,7 @@ jupyterhub:
     # Custom Nebari hub image with jhub-apps pre-installed
     image:
       name: quay.io/nebari/nebari-data-science-pack-jupyterhub
-      tag: "sha-8f2e545"
+      tag: "sha-e906f78"
 
     config:
       JupyterHub:
