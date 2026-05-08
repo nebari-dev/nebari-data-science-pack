@@ -30,14 +30,19 @@ nebariapp:
     # enforceAtGateway runs the OIDC filter at Envoy Gateway. Required for
     # the operator to manage the SecurityPolicy at all.
     enforceAtGateway: true
-    # forwardAccessToken would inject the user's fresh access token as
-    # `Authorization: Bearer` on every upstream request, fixing the
-    # AccessToken-cookie staleness in Envoy Gateway v1.6. Disabled by default
-    # because jhub-apps's `get_current_user` reads the Authorization header
-    # first and tries to decode it as its own HS256 JWT, which fails with
-    # `InvalidAlgorithmError` and produces an OAuth redirect loop. Re-enable
-    # once jhub-apps is patched to ignore non-HS256 Authorization tokens.
-    forwardAccessToken: false
+    # forwardAccessToken makes Envoy inject the user's freshly-refreshed access
+    # token as `Authorization: Bearer` on every upstream request. This is the
+    # only always-current source of the access token: Envoy v1.6 refreshes its
+    # internal token transparently but does not rotate the AccessToken-* cookie
+    # content, so cookie-based reads go stale ~5 min after login and break
+    # downstream token-exchange (jhub-apps env selector, Nebi auto-auth).
+    #
+    # Enabled by default: the JupyterHub image bundled by this chart pins
+    # jhub-apps to the head of nebari-dev/jhub-apps#676, which makes
+    # `get_current_user` fall through to the jhub-apps cookie when the
+    # Authorization header is not an HS256 wrapper (the historic redirect-loop
+    # source).  Set to false only if running with an unpatched jhub-apps.
+    forwardAccessToken: true
   # landingPage controls whether and how this service appears on the Nebari
   # landing page (requires nebari-operator with LandingPageConfig support).
   landingPage:
