@@ -207,11 +207,12 @@ jupyterhub:
   hub:
     # Custom Nebari hub image with jhub-apps pre-installed.
     # Tag below is the PR-53 merge-commit SHA at the moment of pinning; the
-    # corresponding immutable digest is sha256:33d9d7aece1ef63b88a44f3ee9e23685133576dab95d8ffa95a2ddd2a3af6443
-    # (carries jhub-apps#676: fall-through bearer + Starlette 1.0 TemplateResponse fix).
+    # corresponding immutable digest is
+    # sha256:e9b481657f34c16b367d402ca1cce79ac64b177dc9eba48f85f35be363958126
+    # (carries the GenericOAuthenticator switch + jhub-apps 2025.11.1 release).
     image:
       name: quay.io/nebari/nebari-data-science-pack-jupyterhub
-      tag: "sha-ab37dda"
+      tag: "sha-ae0969a"
 
     config:
       JupyterHub:
