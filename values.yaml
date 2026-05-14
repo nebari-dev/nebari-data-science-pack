@@ -208,12 +208,12 @@ jupyterhub:
     # Custom Nebari hub image with jhub-apps pre-installed.
     # Tag below is the PR-53 merge-commit SHA at the moment of pinning; the
     # corresponding immutable digest is
-    # sha256:4be08f31306c4da35ceccc390688e02947f02d7eab5fbd1efddca90af8bd00fb
-    # (carries the GenericOAuthenticator switch + explicit openid scope
-    # so KC /userinfo doesn't 403 at token_to_user).
+    # sha256:8e007b6dc55ffe5f451d016610f0733462de323df5bb2af3235a6f17b22e5ddf
+    # (carries the GenericOAuthenticator switch, openid scope, and
+    # starlette<1 cap so /services/japps/create-app doesn't 500).
     image:
       name: quay.io/nebari/nebari-data-science-pack-jupyterhub
-      tag: "sha-ffb035a"
+      tag: "sha-8676046"
 
     config:
       JupyterHub:
