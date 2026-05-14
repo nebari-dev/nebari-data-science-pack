@@ -21,28 +21,26 @@ nebariapp:
     enabled: true
     provider: keycloak
     provisionClient: true
-    redirectURI: /oauth2/callback  # Envoy Gateway's default OIDC callback
+    # Hub does its own OAuth dance (see config/jupyterhub/00-gateway-auth.py),
+    # so the callback URL is JupyterHub's standard path, not Envoy's.
+    redirectURI: /hub/oauth_callback
     scopes:
       - openid
       - profile
       - email
       - groups
-    # enforceAtGateway runs the OIDC filter at Envoy Gateway. Required for
-    # the operator to manage the SecurityPolicy at all.
-    enforceAtGateway: true
-    # forwardAccessToken makes Envoy inject the user's freshly-refreshed access
-    # token as `Authorization: Bearer` on every upstream request. This is the
-    # only always-current source of the access token: Envoy v1.6 refreshes its
-    # internal token transparently but does not rotate the AccessToken-* cookie
-    # content, so cookie-based reads go stale ~5 min after login and break
-    # downstream token-exchange (jhub-apps env selector, Nebi auto-auth).
-    #
-    # Enabled by default: the JupyterHub image bundled by this chart pins
-    # jhub-apps to the head of nebari-dev/jhub-apps#676, which makes
-    # `get_current_user` fall through to the jhub-apps cookie when the
-    # Authorization header is not an HS256 wrapper (the historic redirect-loop
-    # source).  Set to false only if running with an unpatched jhub-apps.
-    forwardAccessToken: true
+    # enforceAtGateway runs Envoy's OIDC filter for the host. Disabled here:
+    # when JupyterHub is its own OAuth client (GenericOAuthenticator with
+    # refresh_token grants), Envoy-level OIDC adds nothing and its cookie
+    # rotation lag stales out auth_state for /services/japps/* paths.
+    # Operator drops the SecurityPolicy on this flip via
+    # deleteSecurityPolicyIfExists; the KC client + Secret stay provisioned
+    # because provisionClient: true is independent of enforcement.
+    enforceAtGateway: false
+    # No longer needed once hub owns the OAuth flow — keeping it false avoids
+    # confusing dual-token paths between Envoy-injected Bearer and hub's own
+    # stored access_token.
+    forwardAccessToken: false
   # landingPage controls whether and how this service appears on the Nebari
   # landing page (requires nebari-operator with LandingPageConfig support).
   landingPage:
