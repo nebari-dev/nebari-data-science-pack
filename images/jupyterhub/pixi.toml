@@ -19,14 +19,15 @@ python-kubernetes = "*"
 kubernetes_asyncio = "==29.0.0"
 jupyterhub-idle-culler = "==1.2.1"
 sqlalchemy = "==1.4.46"
-# jhub-apps#676 requires pyjwt>=2.10. Pin in conda so transitive deps that
-# request <2.10 are forced to upgrade rather than pinning to 2.9.0.
-pyjwt = ">=2.10,<3"
+# jhub-apps 2025.11.1 pins pyjwt<2.10; conda-forge's newer 2.12 would
+# violate that. Cap pyjwt here so the conda solve stays compatible.
+pyjwt = ">=2.9,<2.10"
 
 [pypi-dependencies]
 nebari-jupyterhub-theme = "==2024.7.1"
 python-keycloak = "==0.26.1"
-# Pinned to nebari-dev/jhub-apps#676 (fall-through-on-non-HS256-Bearer)
-# until the fix lands in a tagged release. Required for forwardAccessToken: true
-# behind Envoy Gateway.
-jhub-apps = { git = "https://github.com/nebari-dev/jhub-apps.git", rev = "5d86277f926136e0ecf253d36b261dd456727855" }
+# Tagged release. The earlier git-pin to nebari-dev/jhub-apps#676
+# (Bearer fall-through + Starlette signature fix) is no longer needed: hub
+# now owns its own OAuth flow (see chart's 00-gateway-auth.py), so Envoy
+# does not inject an RS256 Bearer to /services/japps/* paths.
+jhub-apps = "==2025.11.1"
