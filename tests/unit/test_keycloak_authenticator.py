@@ -129,6 +129,54 @@ def test_configure_requests_openid_scope_so_userinfo_endpoint_works():
     assert "email" in scopes
 
 
+def test_configure_enables_auto_login_so_hub_skips_local_login_form():
+    """auto_login=True makes /hub/login 302 to the IdP, not render a form.
+
+    Without this, users see hub's "Sign in with OAuth 2.0" page with a
+    button to click — pointless friction when there's one IdP.
+    """
+    c, _ = _configure_with_defaults()
+    assert c.Authenticator.auto_login is True
+
+
+def test_keycloak_authenticator_serves_custom_logout_handler():
+    """KC v18+ requires id_token_hint at end_session_endpoint.
+
+    A static logout_redirect_url can't include it (per-user), so the
+    authenticator must install a handler that builds the URL per request.
+    """
+    c, mod = _configure_with_defaults()
+    handlers = mod.KeyCloakOAuthenticator().get_handlers(app=None)
+    paths = [h[0] for h in handlers]
+    assert "/logout" in paths
+
+
+def test_build_logout_url_includes_id_token_hint_and_post_redirect():
+    c, mod = _configure_with_defaults()
+    url = mod._build_logout_url(
+        end_session_url=f"{ISSUER}/protocol/openid-connect/logout",
+        id_token="header.payload.signature",
+        post_logout_redirect_uri=EXTERNAL,
+    )
+    assert url.startswith(f"{ISSUER}/protocol/openid-connect/logout?")
+    assert "id_token_hint=header.payload.signature" in url
+    assert "post_logout_redirect_uri=" in url
+    assert "https%3A%2F%2Fhub.example.test" in url
+
+
+def test_build_logout_url_omits_id_token_hint_when_missing():
+    """Token may be absent (legacy session): still produce a usable URL
+    that at least clears local cookies and bounces back."""
+    c, mod = _configure_with_defaults()
+    url = mod._build_logout_url(
+        end_session_url=f"{ISSUER}/protocol/openid-connect/logout",
+        id_token=None,
+        post_logout_redirect_uri=EXTERNAL,
+    )
+    assert "id_token_hint=" not in url
+    assert "post_logout_redirect_uri=" in url
+
+
 def test_any_keycloak_authenticated_user_is_allowed_by_default():
     """The gateway path admitted any KC user; this path must match.
 
