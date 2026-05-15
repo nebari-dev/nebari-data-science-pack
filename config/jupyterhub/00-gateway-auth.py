@@ -16,12 +16,14 @@ and ``OAUTH_EXTERNAL_URL`` come from chart-rendered envs.
 
 # ruff: noqa: F821 - `c` is a magic global provided by JupyterHub
 
+import json
 import os
 from pathlib import Path
 from urllib.parse import urlencode
 
 from oauthenticator.generic import GenericOAuthenticator
 from oauthenticator.oauth2 import OAuthLogoutHandler
+from tornado.httpclient import HTTPClientError
 
 
 def _build_logout_url(
@@ -93,6 +95,77 @@ class KeyCloakOAuthenticator(GenericOAuthenticator):
     # Stashed by configure() so the logout handler can build URLs at request time.
     _kc_end_session_url: str = ""
     _kc_post_logout_redirect_uri: str = ""
+
+    async def refresh_user(self, user, handler=None):
+        """Run KC's refresh_token grant and persist rotated tokens to auth_state.
+
+        JupyterHub's default Authenticator.refresh_user is a no-op (returns
+        True), and GenericOAuthenticator doesn't override it. Result: the
+        refresh_token stored in auth_state at OAuth-callback time stays
+        frozen until KC's SSO idle timeout invalidates it (~30 min by
+        default). The next sync caller — nebi-envs's 3-step exchange —
+        then fails at step 1 with `invalid_grant: Token is not active`,
+        env list returns [], and the Create-App Software Environment
+        dropdown vanishes for the user.
+
+        Contract (per JupyterHub Authenticator.refresh_user docstring):
+          - return dict  -> JupyterHub merges these fields into auth_state
+          - return True  -> auth_state is fine, leave it
+          - return False -> auth_state is invalid, force re-login
+
+        We always return a dict on a successful grant so KC's rotated
+        refresh_token gets written back. On `invalid_grant` we return False
+        to force re-auth (silent no-op would leave the session stale until
+        next manual login). Transient errors keep the existing auth_state.
+        """
+        auth_state = await user.get_auth_state()
+        if not auth_state or not auth_state.get("refresh_token"):
+            return True
+
+        body = urlencode({
+            "grant_type": "refresh_token",
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "refresh_token": auth_state["refresh_token"],
+        })
+        try:
+            token_info = await self.httpfetch(
+                self.token_url,
+                method="POST",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                body=body,
+            )
+        except HTTPClientError as e:
+            err_kind = ""
+            if e.response is not None and e.response.body:
+                try:
+                    err_kind = json.loads(e.response.body).get("error", "")
+                except Exception:
+                    pass
+            if e.code == 400 and err_kind == "invalid_grant":
+                self.log.warning(
+                    "KC refresh_token expired for %s — forcing re-login",
+                    user.name,
+                )
+                return False
+            self.log.warning(
+                "KC refresh failed for %s: HTTP %s %s — keeping current auth_state",
+                user.name, e.code, err_kind or e.message,
+            )
+            return True
+
+        # Successful grant: KC returns a new access_token (always) and a
+        # rotated refresh_token (when rotation enabled). Preserve any
+        # auth_state keys we don't get back (e.g. oauth_user from
+        # GenericOAuthenticator.authenticate's response).
+        new_state = dict(auth_state)
+        new_state["access_token"] = token_info["access_token"]
+        if token_info.get("refresh_token"):
+            new_state["refresh_token"] = token_info["refresh_token"]
+        if token_info.get("id_token"):
+            new_state["id_token"] = token_info["id_token"]
+        new_state["token_response"] = token_info
+        return {"auth_state": new_state}
 
 
 def _kc_urls(issuer: str) -> dict:
