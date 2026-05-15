@@ -20,6 +20,7 @@ import os
 from pathlib import Path
 from urllib.parse import quote, urlencode
 
+import jupyterhub.handlers.login as _hub_login_handlers
 from jupyterhub.handlers.login import LogoutHandler
 from oauthenticator.generic import GenericOAuthenticator
 
@@ -88,9 +89,39 @@ class KeyCloakOAuthenticator(GenericOAuthenticator):
     _kc_end_session_url: str = ""
     _kc_post_logout_redirect_uri: str = ""
 
-    def get_handlers(self, app):
-        # Append KeyCloakLogoutHandler to whatever oauthenticator provides.
-        return list(super().get_handlers(app)) + [("/logout", KeyCloakLogoutHandler)]
+
+def _install_logout_patch():
+    """Replace jupyterhub.handlers.login.LogoutHandler.get with ours.
+
+    The Authenticator's get_handlers list is appended AFTER jupyterhub's
+    default handlers in init_handlers, so tornado's first-match routing
+    picks the default LogoutHandler at /logout — our overrides via
+    get_handlers are dead routes. Monkey-patching the base class is the
+    least-surprising way to inject id_token_hint without forking the
+    handler registry.
+    """
+    async def get(self):
+        user = self.current_user
+        id_token = None
+        if user is not None:
+            try:
+                auth_state = await user.get_auth_state()
+                if auth_state:
+                    id_token = auth_state.get("id_token")
+            except Exception:
+                self.log.warning(
+                    "logout: failed reading auth_state for %s — proceeding "
+                    "without id_token_hint", user.name, exc_info=True,
+                )
+            await self.default_handle_logout()
+            await self.handle_logout()
+        url = _build_logout_url(
+            end_session_url=self.authenticator._kc_end_session_url,
+            id_token=id_token,
+            post_logout_redirect_uri=self.authenticator._kc_post_logout_redirect_uri,
+        )
+        self.redirect(url)
+    _hub_login_handlers.LogoutHandler.get = get
 
 
 def _kc_urls(issuer: str) -> dict:
@@ -147,6 +178,8 @@ def configure(
     # Stash the pieces the logout handler needs at request time.
     c.KeyCloakOAuthenticator._kc_end_session_url = urls["end_session_url"]
     c.KeyCloakOAuthenticator._kc_post_logout_redirect_uri = external_url
+    # Patch the base LogoutHandler so /hub/logout terminates the KC session.
+    _install_logout_patch()
     # Skip hub's local /hub/login form — go straight to Keycloak's
     # authorize endpoint. One IdP, no point making the user click a
     # "Sign in with OAuth 2.0" button.
