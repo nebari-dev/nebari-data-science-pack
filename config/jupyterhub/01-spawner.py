@@ -524,18 +524,37 @@ async def _nebi_pre_spawn_hook(spawner):
 def _get_user_groups(auth_state):
     """Extract and filter user groups from auth_state.
 
-    Reads groups stored in auth_state by KeyCloakOAuthenticator (from
-    Keycloak's IdToken `groups` claim). Applies the allowlist if
-    configured. Uses Path(g).name (last component) so KC groups like
-    /projects/myproj collapse to myproj.
-    Deduplicates to prevent duplicate mountPath entries in the pod spec.
-    Note: does NOT fall back to spawner.user.groups — accessing that SQLAlchemy
-    relationship from an async hook causes DetachedInstanceError.
+    Source priority:
+      1. ``auth_state["groups_with_permission_to_mount"]`` if present —
+         this is the role-gated subset stamped by KeyCloakOAuthenticator
+         when RBAC is enabled. Being in 10 KC groups should NOT mean
+         mounting 10 shared dirs; only those holding the
+         ``shared-directory-mount`` role on the hub client get to mount.
+      2. ``auth_state["groups"]`` — the user's full group list, used as
+         a fallback for clusters that have not yet deployed the RBAC
+         bootstrap (legacy / chart-default behaviour).
+
+    Then applies the chart's static allowlist, Path(g).name normalisation
+    (so /projects/myproj → myproj), and dedup.
+
+    Note: does NOT fall back to spawner.user.groups — accessing that
+    SQLAlchemy relationship from an async hook causes
+    DetachedInstanceError.
     """
     raw_groups = []
     if auth_state:
-        raw_groups = auth_state.get("groups", [])
-        log.debug("shared-storage: raw groups from auth_state: %s", raw_groups)
+        if "groups_with_permission_to_mount" in auth_state:
+            raw_groups = auth_state["groups_with_permission_to_mount"]
+            log.debug(
+                "shared-storage: role-gated groups from auth_state: %s",
+                raw_groups,
+            )
+        else:
+            raw_groups = auth_state.get("groups", [])
+            log.debug(
+                "shared-storage: fallback groups from auth_state (no RBAC filter): %s",
+                raw_groups,
+            )
     else:
         log.debug("shared-storage: no auth_state (DummyAuthenticator?), groups will be empty")
 

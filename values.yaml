@@ -166,6 +166,49 @@ nebi:
   # Port the Nebi server listens on (used in hub -> nebi NetworkPolicy egress rule).
   port: 8460
 
+# Helm Job that one-shots Keycloak realm config for role-gated shared
+# mounts (Nebari issue #2304). Runs as a post-install / post-upgrade
+# hook. Idempotent; skips cleanly if ``kcAdminCredentialSecret`` is
+# unset, so the chart can install on clusters that haven't yet
+# surfaced an admin credential.
+#
+# The Job:
+#   1. Adds the ``oidc-group-membership-mapper`` to the ``groups``
+#      client scope (the missing-mapper bug that surfaces as an empty
+#      groups claim on tokens).
+#   2. Creates the ``allow-group-directory-creation-role`` client
+#      role on the hub OIDC client with attributes
+#      ``component=shared-directory`` and
+#      ``scopes=write:shared-mount`` (same role classic nebari
+#      provisions).
+#   3. Grants the hub client ``serviceAccountsEnabled=true`` and
+#      binds ``realm-management.{view-clients,view-groups,view-realm}``
+#      to its service account.
+#   4. Assigns the shared-mount role to the KC groups in
+#      ``sharedMountGroups``.
+#
+# Runtime config the hub itself reads (admin API URL + role name)
+# goes under ``jupyterhub.custom.rbac-*`` — see below.
+rbac:
+  bootstrap:
+    enabled: false
+    # Name of a K8s Secret holding the KC realm-admin password in key
+    # ``password``. Job authenticates as ``admin`` in the ``master``
+    # realm via kcadm.sh and applies config to ``realmName``.
+    kcAdminCredentialSecret: ""
+    # Realm to bootstrap.
+    realmName: "nebari"
+    # ClientId of the hub OAuth client in Keycloak (created by the
+    # nebari-operator NebariApp). The role + SA roles attach here.
+    hubClientId: ""
+    # KC group paths to assign the shared-mount role to. Each path
+    # must already exist in KC. e.g.
+    #   - /admin
+    #   - /developer
+    sharedMountGroups: []
+    # Image used to run kcadm.sh (matches the realm's Keycloak version).
+    image: "quay.io/keycloak/keycloak:24.0.5"
+
 # JupyterHub configuration
 # All values under this key are passed to the jupyterhub subchart
 jupyterhub:
@@ -190,6 +233,20 @@ jupyterhub:
     shared-storage-enabled: false
     shared-storage-groups: []       # allowlist; empty = all groups from token
     shared-storage-mount-prefix: "/shared"
+    # Role-gated shared-mount RBAC (Nebari issue #2304).
+    # When ``rbac-realm-api-url`` is set, the hub calls KC's Admin API
+    # on every login + refresh to find which of the user's KC groups
+    # hold ``rbac-shared-mount-role-name`` on the hub OIDC client.
+    # The spawner then mounts only ``/shared/<group>`` for that
+    # filtered subset. Empty URL = RBAC disabled = spawner falls back
+    # to mounting every group the user is in (legacy behaviour).
+    #
+    # KC requirements: the hub OAuth client needs
+    # ``serviceAccountsEnabled=true`` and realm-management roles
+    # (view-clients, view-groups, view-realm) bound to its SA. The
+    # chart's ``rbac.bootstrap`` Helm Job provisions this.
+    rbac-realm-api-url: ""
+    rbac-shared-mount-role-name: "allow-group-directory-creation-role"
     # jhub-apps (JAppsConfig) overrides.
     # Any key here is set as an attribute on c.JAppsConfig before install_jhub_apps().
     # See https://jhub-apps.nebari.dev/docs/configuration for available options.
