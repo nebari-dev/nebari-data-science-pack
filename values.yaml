@@ -190,15 +190,20 @@ nebi:
 # goes under ``jupyterhub.custom.rbac-*`` — see below.
 rbac:
   bootstrap:
-    enabled: false
-    # Namespace to run the Job in. Default (empty) = chart release
-    # namespace. Override to the keycloak namespace so the Job can
-    # read the admin-credentials Secret without cross-namespace copy.
-    namespace: ""
+    # On by default — every Nebari deployment uses bitnami/keycloakx +
+    # nebari-operator NebariApps, so the chart can self-bootstrap the
+    # KC role + group mapper that the spawner needs. Set ``false`` for
+    # non-Nebari (local-dev, kind, BYO-Keycloak) deployments.
+    enabled: true
+    # Namespace the Job runs in. Defaults to ``keycloak`` so the Job
+    # can read the admin-credentials Secret without cross-namespace
+    # copy. Override for non-bitnami KC layouts.
+    namespace: "keycloak"
     # Name of a K8s Secret holding the KC realm-admin password in key
     # ``password``. Job authenticates as ``admin`` in the ``master``
-    # realm via kcadm.sh and applies config to ``realmName``.
-    kcAdminCredentialSecret: ""
+    # realm via kcadm.sh and applies config to ``realmName``. Defaults
+    # to bitnami/keycloakx's secret name; override for other layouts.
+    kcAdminCredentialSecret: "keycloak-admin-credentials"
     # Key within ``kcAdminCredentialSecret`` that holds the password.
     # Default ``admin-password`` matches the bitnami keycloak/keycloakx
     # chart's ``keycloak-admin-credentials`` Secret layout.
@@ -206,7 +211,10 @@ rbac:
     # Realm to bootstrap.
     realmName: "nebari"
     # ClientId of the hub OAuth client in Keycloak (created by the
-    # nebari-operator NebariApp). The role + SA roles attach here.
+    # nebari-operator NebariApp). Leave empty to derive from the
+    # release + chart name (the operator's standard pattern:
+    # ``jupyterhub-<release>-<chart>``). Override for non-standard
+    # client ids.
     hubClientId: ""
     # Name of the client role the Job creates on the hub OIDC client.
     # Must match ``KC_SHARED_MOUNT_ROLE`` env var on the hub Deployment
