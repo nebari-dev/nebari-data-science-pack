@@ -7,30 +7,53 @@ on:
     branches: [main]
 
 jobs:
-  e2e:
+  unit:
+    name: unit
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
+    timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
 
-      - name: Install kind
-        run: |
-          curl -fsSLo /tmp/kind https://kind.sigs.k8s.io/dl/v0.27.0/kind-linux-amd64
-          sudo install -m 0755 /tmp/kind /usr/local/bin/kind
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
-      - name: Install Helm
-        run: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      - name: Set up isolated Python env
+        run: |
+          uv venv .venv-unit --python 3.10
+          # Pinned versions the hub image runs against — tests exercise
+          # the real oauthenticator + jupyterhub contracts, not a stub.
+          uv pip install --python .venv-unit/bin/python \
+            jupyterhub==5.1.0 \
+            oauthenticator==16.3.0 \
+            pytest
+
+      - name: pytest tests/unit
+        run: .venv-unit/bin/python -m pytest tests/unit -v --color=yes
+
+  # Two roles for prep:
+  #   1. Cache the multi-GB singleuser image tar so every matrix leg
+  #      restores it from cache instead of paying the docker-pull cost.
+  #      Key by the chart-rendered image ref so values.yaml bumps
+  #      invalidate automatically.
+  #   2. Collect the list of pytest node IDs from tests/e2e/ and emit
+  #      it as a JSON array the matrix consumes. Adding/removing tests
+  #      flows through the matrix automatically with no workflow edits.
+  prep:
+    name: prep (image + test matrix)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ref: ${{ steps.img.outputs.ref }}
+      tar: ${{ steps.img.outputs.tar }}
+      tests: ${{ steps.collect.outputs.tests }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
 
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
-      # Singleuser image is multi-GB and is the dominant cold-start cost
-      # (~73s pulled in-cluster during the first test). Cache the tar across
-      # CI runs and side-load it into kind so kubelet never goes to the
-      # registry. Cache key is the image ref so a `values.yaml` bump
-      # invalidates automatically.
       - name: Resolve singleuser image ref
         id: img
         run: |
@@ -51,22 +74,158 @@ jobs:
           docker pull "${{ steps.img.outputs.ref }}"
           docker save "${{ steps.img.outputs.ref }}" -o "${{ steps.img.outputs.tar }}"
 
-      # Pre-create the cluster here (instead of letting the pytest fixture
-      # do it) so we can side-load the cached image before any pod is
-      # scheduled. The fixture's ensure_cluster() reuses an existing one.
+      - name: Collect e2e test node IDs into a JSON array
+        id: collect
+        run: |
+          # Emit `[{"id":"<short>","path":"<full pytest node id>"}, …]`.
+          # `id` becomes the matrix label so the GitHub UI groups the
+          # legs as `e2e / <short>` instead of the full file path
+          # noise. `path` is what pytest needs to run the test.
+          # tests/e2e/pytest.ini sets rootdir to tests/e2e, so the
+          # collected IDs come without the prefix; add it back.
+          uvx pytest tests/e2e --collect-only -q 2>/dev/null \
+            | grep -E '^test_.*::' \
+            | while IFS= read -r node; do
+                # node = test_FILE.py::test_FN[param]
+                # short = FN[param] (or FN if not parametrized)
+                short=$(echo "$node" | sed -E 's|^test_[^.]+\.py::test_||')
+                jq -n --arg id "$short" --arg path "tests/e2e/$node" \
+                  '{id: $id, path: $path}'
+              done \
+            | jq -s -c . > /tmp/tests.json
+          echo "tests=$(cat /tmp/tests.json)" >> "$GITHUB_OUTPUT"
+          echo "Collected:"
+          cat /tmp/tests.json | jq -r '.[] | "\(.id) \t\(.path)"'
+
+  # Matrix-per-test e2e: each leg gets its own kind cluster, helm
+  # install, and runs ONE pytest node id. Wall time = max(leg) instead
+  # of sum(tests). Adding a test is free — prep job's collection adds
+  # a matrix leg automatically.
+  e2e:
+    name: e2e / ${{ matrix.test.id }}
+    runs-on: ubuntu-latest
+    needs: prep
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        test: ${{ fromJSON(needs.prep.outputs.tests) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
+
+      - name: Install kind
+        run: |
+          curl -fsSLo /tmp/kind https://kind.sigs.k8s.io/dl/v0.27.0/kind-linux-amd64
+          sudo install -m 0755 /tmp/kind /usr/local/bin/kind
+
+      - name: Install Helm
+        run: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Restore singleuser image from cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+        with:
+          path: ${{ needs.prep.outputs.tar }}
+          key: singleuser-${{ needs.prep.outputs.ref }}
+          fail-on-cache-miss: true
+
+      # Sanitise the pytest node id into a kind-cluster name: kind
+      # names are DNS-1123 (lowercase alnum + dashes) and max 38 chars.
+      # SHA1-truncate so duplicates can't collide.
+      - name: Derive cluster name
+        id: cluster
+        run: |
+          SAFE=$(echo '${{ matrix.test.path }}' | sha1sum | cut -c1-12)
+          echo "name=nbe2e-${SAFE}" >> "$GITHUB_OUTPUT"
+
       - name: Create kind cluster
-        run: kind create cluster --name nbtest-e2e --wait 60s
+        run: kind create cluster --name "${{ steps.cluster.outputs.name }}" --wait 60s
 
       - name: Side-load singleuser image into kind node
-        run: kind load image-archive "${{ steps.img.outputs.tar }}" --name nbtest-e2e
+        run: kind load image-archive "${{ needs.prep.outputs.tar }}" --name "${{ steps.cluster.outputs.name }}"
 
-      - name: Run e2e tests
+      - name: Run single test
         env:
-          KIND_CLUSTER: "nbtest-e2e"  # reuse the cluster created above
-          KIND_KEEP: "1"  # runner is ephemeral, skip teardown
-          PYTHONUNBUFFERED: "1"  # stream logs live (no block buffering on non-TTY)
-        run: uvx pytest tests/e2e -v --color=yes
+          KIND_CLUSTER: ${{ steps.cluster.outputs.name }}
+          KIND_KEEP: "1"
+          PYTHONUNBUFFERED: "1"
+        run: uvx pytest "${{ matrix.test.path }}" -v --color=yes
 
       - name: Hub logs on failure
         if: failure()
         run: kubectl logs -l component=hub --tail=200 || true
+
+  # Integration tests for files/keycloak_rbac_bootstrap.py against a
+  # real Keycloak. The bootstrap is the chart's only piece of Python
+  # that talks to Keycloak directly — KC version skew or payload
+  # changes would break it silently in prod. nebari-dev/action-nebari
+  # -sandbox spins up NIC's foundational stack (Keycloak + nebari realm
+  # included) in ~3 min on a vanilla runner; the tests then run against
+  # that live KC via a port-forward.
+  integration-rbac-bootstrap:
+    name: integration / rbac-bootstrap
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
+
+      - name: Provision Nebari sandbox (k3d + NIC platform stack)
+        id: sandbox
+        uses: nebari-dev/action-nebari-sandbox@68b3a446c8ce70e1e100540b97ec532ff2e97dd4  # v1.0.2
+        with:
+          profile: platform
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Wait for Keycloak service
+        env:
+          KUBECONFIG: ${{ steps.sandbox.outputs.kubeconfig }}
+        run: |
+          kubectl -n keycloak rollout status statefulset/keycloak-keycloakx --timeout=300s
+          kubectl -n keycloak get svc/keycloak-keycloakx-http
+
+      - name: Port-forward Keycloak admin
+        env:
+          KUBECONFIG: ${{ steps.sandbox.outputs.kubeconfig }}
+        run: |
+          # Background port-forward. The runner stops on workflow exit,
+          # so no explicit cleanup needed; ``timeout-minutes`` is the
+          # safety net.
+          nohup kubectl -n keycloak port-forward svc/keycloak-keycloakx-http \
+            18080:8080 >/tmp/kc-pf.log 2>&1 &
+          # Poll for the local port — port-forward exits non-zero on
+          # any error so we'd see it via the log dump on failure.
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:18080/realms/master/.well-known/openid-configuration >/dev/null; then
+              echo "KC reachable on :18080 (attempt $i)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Keycloak port-forward never came up"
+          cat /tmp/kc-pf.log
+          exit 1
+
+      - name: Run integration tests
+        env:
+          KUBECONFIG: ${{ steps.sandbox.outputs.kubeconfig }}
+          KC_URL: http://localhost:18080
+          KC_ADMIN_PASSWORD: ${{ steps.sandbox.outputs.keycloak-admin-password }}
+          PYTHONUNBUFFERED: "1"
+        run: uvx pytest tests/integration -v --color=yes
+
+      - name: Keycloak logs on failure
+        if: failure()
+        env:
+          KUBECONFIG: ${{ steps.sandbox.outputs.kubeconfig }}
+        run: |
+          kubectl -n keycloak get pods
+          kubectl -n keycloak logs statefulset/keycloak-keycloakx --tail=200 || true
+          echo "--- port-forward log ---"
+          cat /tmp/kc-pf.log || true

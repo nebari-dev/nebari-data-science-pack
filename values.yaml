@@ -166,6 +166,83 @@ nebi:
   # Port the Nebi server listens on (used in hub -> nebi NetworkPolicy egress rule).
   port: 8460
 
+# Helm Job that one-shots Keycloak realm config for role-gated shared
+# mounts. Runs as a post-install / post-upgrade
+# hook. Idempotent; skips cleanly if ``kcAdminCredentialSecret`` is
+# unset, so the chart can install on clusters that haven't yet
+# surfaced an admin credential.
+#
+# The Job:
+#   1. Adds the ``oidc-group-membership-mapper`` to the ``groups``
+#      client scope (the missing-mapper bug that surfaces as an empty
+#      groups claim on tokens).
+#   2. Creates the ``allow-group-directory-creation-role`` client
+#      role on the hub OIDC client with attributes
+#      ``component=shared-directory`` and
+#      ``scopes=write:shared-mount``.
+#   3. Grants the hub client ``serviceAccountsEnabled=true`` and
+#      binds ``realm-management.{view-clients,view-groups,view-realm}``
+#      to its service account.
+#   4. Assigns the shared-mount role to the KC groups in
+#      ``sharedMountGroups``.
+#
+# Runtime config the hub itself reads (admin API URL + role name)
+# goes under ``jupyterhub.custom.rbac-*`` — see below.
+rbac:
+  bootstrap:
+    # On by default — every Nebari deployment uses bitnami/keycloakx +
+    # nebari-operator NebariApps, so the chart can self-bootstrap the
+    # KC role + group mapper that the spawner needs. Set ``false`` for
+    # non-Nebari (local-dev, kind, BYO-Keycloak) deployments.
+    enabled: true
+    # Namespace the Job runs in. Defaults to ``keycloak`` so the Job
+    # can read the admin-credentials Secret without cross-namespace
+    # copy. Override for non-bitnami KC layouts.
+    namespace: "keycloak"
+    # Name of a K8s Secret holding the KC realm-admin password in key
+    # ``password``. Job authenticates as ``admin`` in the ``master``
+    # realm via kcadm.sh and applies config to ``realmName``. Defaults
+    # to bitnami/keycloakx's secret name; override for other layouts.
+    kcAdminCredentialSecret: "keycloak-admin-credentials"
+    # Key within ``kcAdminCredentialSecret`` that holds the password.
+    # Default ``admin-password`` matches the bitnami keycloak/keycloakx
+    # chart's ``keycloak-admin-credentials`` Secret layout.
+    kcAdminCredentialSecretKey: "admin-password"
+    # Realm to bootstrap.
+    realmName: "nebari"
+    # ClientId of the hub OAuth client in Keycloak (created by the
+    # nebari-operator NebariApp). Leave empty to derive from the
+    # release + chart name (the operator's standard pattern:
+    # ``jupyterhub-<release>-<chart>``). Override for non-standard
+    # client ids.
+    hubClientId: ""
+    # Name of the client role the Job creates on the hub OIDC client.
+    # Must match ``KC_SHARED_MOUNT_ROLE`` env var on the hub Deployment
+    # (defaults align).
+    sharedMountRoleName: "allow-group-directory-creation-role"
+    # KC group paths to assign the shared-mount role to. Each path
+    # must already exist in KC. e.g.
+    #   - /admin
+    #   - /developer
+    sharedMountGroups: []
+    # External hub URL (origin) used to set ``rootUrl`` / ``baseUrl`` /
+    # ``initiate.login.uri`` on the hub OIDC client. Without these,
+    # KC-initiated SSO flows (account console, third-party launchers)
+    # redirect straight to ``/hub/oauth_callback`` without first hitting
+    # ``/hub/oauth_login``, so JupyterHub has no ``oauthenticator-state``
+    # cookie set and returns ``400 OAuth state mismatch``.
+    # Leave empty to default to ``https://{nebariapp.hostname}``; set to
+    # an explicit URL for non-standard layouts. Set to "false" string or
+    # remove via Helm override to skip the patch entirely.
+    hubExternalUrl: ""
+    # Keycloak server URL the bootstrap script talks to (Admin REST API
+    # lives at ``<kcHost>/admin/realms/...``). In-cluster service URL by
+    # default; override if Keycloak sits at a different hostname.
+    kcHost: "http://keycloak-keycloakx-http.keycloak.svc.cluster.local:8080"
+    # Image that runs ``files/keycloak_rbac_bootstrap.py``. The script
+    # uses only the standard library, so any small Python image works.
+    image: "python:3.12-slim"
+
 # JupyterHub configuration
 # All values under this key are passed to the jupyterhub subchart
 jupyterhub:
@@ -185,11 +262,87 @@ jupyterhub:
     nebi-client-id: ""       # Nebi's Keycloak OIDC client ID
     jupyterhub-client-id: "" # JupyterHub's Keycloak OIDC client ID
     nebi-environment-selector: false  # Set true to show nebi workspaces in jhub-apps env dropdown
+    # ---------------------------------------------------------------------------
+    # Profiles — resource sizing for JupyterLab pods.
+    # Each entry maps directly to a KubeSpawner profile_list item. Slugs are
+    # derived from display_name via z2jh's slugify (e.g. "Small Instance" →
+    # "small-instance"). Set to [] to disable the profile selector
+    # (single-instance mode).
+    # kubespawner_override accepts any valid KubeSpawner trait (cpu_limit,
+    # mem_limit, node_selector, image, extra_resource_limits, etc.) so deployers
+    # can add GPU profiles, custom images, etc. without code changes.
+    # NOTE: when bumping singleuser.image.tag below, also bump the
+    # ``image: ...`` lines inside each profile_options.image.choices.default
+    # entry so the profile selector shows the right tag. (z2jh values.yaml
+    # cannot reference other values, so the duplication is unavoidable.)
+    profiles:
+      - slug: small-instance
+        display_name: "Small Instance"
+        description: "1 CPU / 2 GB RAM — interactive notebooks, light data exploration, teaching."
+        default: true
+        kubespawner_override:
+          # Outer image is what jhub-apps' Create App reads for its image
+          # TextField (server-types.tsx: `type.kubespawner_override.image`).
+          # The same value sits inside profile_options.image.choices.default
+          # so the JupyterLab profile selector keeps showing it too.
+          # scripts/bump_image_tags.py syncs all three on every bump.
+          image: quay.io/nebari/nebari-data-science-pack-jupyterlab:sha-7788c40
+          cpu_limit: 1
+          cpu_guarantee: 0.5
+          mem_limit: "2G"
+          mem_guarantee: "1G"
+        profile_options:
+          image:
+            display_name: Image
+            choices:
+              default:
+                display_name: "nebari-data-science-pack-jupyterlab:sha-7788c40"
+                default: true
+                kubespawner_override:
+                  image: quay.io/nebari/nebari-data-science-pack-jupyterlab:sha-7788c40
+      - slug: medium-instance
+        display_name: "Medium Instance"
+        description: "4 CPU / 8 GB RAM — pandas / scikit-learn workloads on medium datasets."
+        kubespawner_override:
+          image: quay.io/nebari/nebari-data-science-pack-jupyterlab:sha-7788c40
+          cpu_limit: 4
+          cpu_guarantee: 2
+          mem_limit: "8G"
+          mem_guarantee: "4G"
+        profile_options:
+          image:
+            display_name: Image
+            choices:
+              default:
+                display_name: "nebari-data-science-pack-jupyterlab:sha-7788c40"
+                default: true
+                kubespawner_override:
+                  image: quay.io/nebari/nebari-data-science-pack-jupyterlab:sha-7788c40
+    # Terminal customization: controls Starship prompt in JupyterLab terminals.
+    # When false, falls back to the default bash prompt.
+    terminal-customization: true
     # Shared storage — MUST match top-level sharedStorage.* values exactly.
     # helm template will fail if sharedStorage.enabled and shared-storage-enabled diverge.
     shared-storage-enabled: false
     shared-storage-groups: []       # allowlist; empty = all groups from token
     shared-storage-mount-prefix: "/shared"
+    # Role-gated shared-mount RBAC configuration
+    # is delivered via the hub Deployment's env vars (KC_REALM_API_URL
+    # + KC_SHARED_MOUNT_ROLE), NOT via this `custom` block. Reasons:
+    #   * `custom.*` is rendered into the z2jh Secret's embedded
+    #     values.yaml. Several rotating fields in that Secret are
+    #     pinned via Argo `ignoreDifferences` to stop the
+    #     auth_token/cookie_secret churn — and broad ignore on
+    #     ``/data`` silently swallows config changes here.
+    #   * The hub Deployment's env vars flow through SSA + the
+    #     existing checksum-driven hub rollout cleanly.
+    #
+    # Set in the deployer's overlay under
+    # ``jupyterhub.hub.extraEnv.KC_REALM_API_URL``. Empty = RBAC off,
+    # spawner falls back to mounting every group the user is in
+    # (legacy behaviour). KC requirements (serviceAccountsEnabled,
+    # realm-management roles, the shared-directory role with attrs)
+    # are provisioned by the chart's ``rbac.bootstrap`` Helm Job.
     # jhub-apps (JAppsConfig) overrides.
     # Any key here is set as an attribute on c.JAppsConfig before install_jhub_apps().
     # See https://jhub-apps.nebari.dev/docs/configuration for available options.
@@ -213,7 +366,7 @@ jupyterhub:
     # class clears current_user — id_token_hint now reaches KC).
     image:
       name: quay.io/nebari/nebari-data-science-pack-jupyterhub
-      tag: "sha-67880ee"
+      tag: "sha-7788c40"
 
     config:
       JupyterHub:
@@ -246,15 +399,47 @@ jupyterhub:
       #     - email
       # ============================================================
 
-    # Mount custom config files from ConfigMap
+    # Mount custom config files from ConfigMap + the operator-provisioned
+    # Keycloak OIDC client Secret. 00-gateway-auth.py reads client-id /
+    # client-secret / issuer-url from /etc/oauth/ when KC OAuth is wired.
+    #
+    # IMPORTANT: z2jh treats ``extraVolumes`` and ``extraVolumeMounts`` as
+    # lists that REPLACE (not merge) on override. If a deployer sets either
+    # of these, they MUST re-include the entries below or the hub falls
+    # back to dummy auth and/or jupyterhub_config.d is empty.
+    #
+    # The oauth-client secretName follows the operator's convention:
+    # ``{Release.Name}-{Chart.Name}-oidc-client``. Override here if you
+    # use a non-standard release name.
     extraVolumes:
       - name: custom-config
         configMap:
           name: nebari-data-science-pack-hub-config
+      - name: oauth-client
+        secret:
+          secretName: data-science-pack-nebari-data-science-pack-oidc-client
+          optional: true
 
     extraVolumeMounts:
       - name: custom-config
         mountPath: /usr/local/etc/jupyterhub/jupyterhub_config.d/
+      - name: oauth-client
+        mountPath: /etc/oauth
+        readOnly: true
+
+    # KC OIDC client secret. ``02-jhub-apps.py`` and ``03-nebi-envs.py``
+    # read this env var to do KC token exchange for the Nebi service.
+    # ``00-gateway-auth.py`` reads the same secret from /etc/oauth (file)
+    # for the KeyCloakOAuthenticator wiring — both paths point at the
+    # same operator-provisioned Secret.
+    # The secretName follows the same convention as oauth-client above.
+    extraEnv:
+      JUPYTERHUB_OIDC_CLIENT_SECRET:
+        valueFrom:
+          secretKeyRef:
+            name: data-science-pack-nebari-data-science-pack-oidc-client
+            key: client-secret
+            optional: true
 
     service:
       extraPorts:
@@ -271,7 +456,7 @@ jupyterhub:
   singleuser:
     image:
       name: quay.io/nebari/nebari-data-science-pack-jupyterlab
-      tag: "sha-8f2e545"
+      tag: "sha-7788c40"
     defaultUrl: "/lab"
     extraEnv:
       JUPYTERHUB_SINGLEUSER_APP: "jupyter_server.serverapp.ServerApp"

@@ -1,0 +1,25 @@
+# ~/.bashrc: executed by bash for non-login shells.
+
+# If not running interactively, don't do anything
+case $- in
+    *i*) ;;
+      *) return;;
+esac
+
+# History settings
+HISTSIZE=10000
+HISTFILESIZE=20000
+HISTCONTROL=ignoreboth:erasedups
+shopt -s histappend
+
+# Check window size after each command
+shopt -s checkwinsize
+
+# Aliases and prompt init live in /etc/profile.d/nebari-terminal.sh.
+# Login shells source it directly; this loop covers interactive
+# non-login shells too.
+if [ -d /etc/profile.d ]; then
+    for f in /etc/profile.d/*.sh; do
+        [ -r "$f" ] && . "$f"
+    done
+fi

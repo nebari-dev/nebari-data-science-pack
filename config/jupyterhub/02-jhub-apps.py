@@ -19,7 +19,15 @@ else:
     c.JupyterHub.bind_url = "http://0.0.0.0:8000"
 c.JupyterHub.default_url = "/hub/home"
 c.JupyterHub.template_paths = theme_template_paths
-c.JupyterHub.template_vars = themes.DEFAULT_THEME
+# Match JupyterLab default (IBM Plex Sans, PR #75) on hub + JApps pages.
+# Requires jhub-apps >= 2026.5.1rc1 (PR #677: font_family / font_url theme vars).
+c.JupyterHub.template_vars = {
+    **themes.DEFAULT_THEME,
+    "font_family": "'IBM Plex Sans', sans-serif",
+    "font_url": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap",
+    # Footer in page.html only renders the version string when this is truthy.
+    "display_version": True,
+}
 c.JAppsConfig.jupyterhub_config_path = "/usr/local/etc/jupyterhub/jupyterhub_config.py"
 
 # Apply JAppsConfig overrides from Helm values (jupyterhub.custom.japps-config).

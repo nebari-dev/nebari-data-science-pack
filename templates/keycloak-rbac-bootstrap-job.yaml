@@ -1,0 +1,127 @@
+{{/*
+Keycloak realm bootstrap — runs once per chart install/upgrade.
+
+The actual logic lives in ``files/keycloak_rbac_bootstrap.py`` (a
+plain Python module using only the standard library, unit-tested in
+``tests/unit/test_keycloak_rbac_bootstrap.py``). The Helm chart's
+sole responsibility is to:
+
+  1. ship that file into the cluster as a ConfigMap, and
+  2. run it inside a vanilla ``python:3.x-slim`` container with the
+     right env vars wired from chart values + the deployer-supplied
+     admin-password Secret.
+
+This split keeps the realm provisioning code out of YAML bash heredocs
+where it cannot be tested, linted, or single-stepped. Bumping the
+Python image tag forces a checksum-driven Job re-roll on the next
+chart upgrade.
+
+Gated on:
+  - ``rbac.bootstrap.enabled`` AND
+  - the deployer providing a KC admin password Secret reference AND
+  - ``nebariapp.enabled`` — no Nebari operator / KC realm means there
+    is nothing to bootstrap; lets kind / local-dev installs come up
+    cleanly without the post-install Job hitting a missing namespace.
+The chart deploys fine without RBAC bootstrap pre-configured.
+*/}}
+{{- if and .Values.nebariapp.enabled .Values.rbac.bootstrap.enabled .Values.rbac.bootstrap.kcAdminCredentialSecret }}
+{{/*
+Auto-derive hubClientId from release + chart name when the deployer
+hasn't set one explicitly. Matches the nebari-operator NebariApp
+client-id pattern: ``jupyterhub-<release>-<chart>``. Override via
+``rbac.bootstrap.hubClientId`` for non-standard layouts.
+*/}}
+{{- $hubClientId := .Values.rbac.bootstrap.hubClientId | default (printf "jupyterhub-%s-%s" .Release.Name .Chart.Name) }}
+{{- $script := .Files.Get "files/keycloak_rbac_bootstrap.py" }}
+{{- if not $script }}
+{{- fail "files/keycloak_rbac_bootstrap.py missing from the chart — repackage with the file included." }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nebari-data-science-pack.fullname" . }}-rbac-bootstrap
+  {{- with .Values.rbac.bootstrap.namespace }}
+  namespace: {{ . | quote }}
+  {{- end }}
+  labels:
+    {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rbac-bootstrap
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  keycloak_rbac_bootstrap.py: |
+{{ $script | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nebari-data-science-pack.fullname" . }}-rbac-bootstrap
+  {{- with .Values.rbac.bootstrap.namespace }}
+  namespace: {{ . | quote }}
+  {{- end }}
+  labels:
+    {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rbac-bootstrap
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    # Keep the Job around after success so its logs stay inspectable.
+    # Delete only before the next hook fires (next install/upgrade).
+    "helm.sh/hook-delete-policy": before-hook-creation
+    # Force a re-run when the script content changes — Helm hook re-uses
+    # the same Job name across upgrades and would otherwise skip if the
+    # spec hash matches. Hash the script + values so a chart-only change
+    # also re-runs.
+    checksum/script: {{ $script | sha256sum }}
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        {{- include "nebari-data-science-pack.labels" . | nindent 8 }}
+        app.kubernetes.io/component: rbac-bootstrap
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: bootstrap
+          image: {{ .Values.rbac.bootstrap.image | quote }}
+          command:
+            - python
+            - /scripts/keycloak_rbac_bootstrap.py
+          env:
+            - name: KC_HOST
+              value: {{ .Values.rbac.bootstrap.kcHost | quote }}
+            - name: KC_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.rbac.bootstrap.kcAdminCredentialSecret | quote }}
+                  key: {{ .Values.rbac.bootstrap.kcAdminCredentialSecretKey | default "password" | quote }}
+            - name: REALM
+              value: {{ .Values.rbac.bootstrap.realmName | quote }}
+            - name: HUB_CLIENT_ID
+              value: {{ $hubClientId | quote }}
+            - name: ROLE_NAME
+              value: {{ .Values.rbac.bootstrap.sharedMountRoleName | quote }}
+            - name: SHARED_MOUNT_GROUPS
+              value: {{ .Values.rbac.bootstrap.sharedMountGroups | join "," | quote }}
+            - name: HUB_EXTERNAL_URL
+              {{- /* Defaults to https://{nebariapp.hostname} when unset so the
+              bootstrap can patch rootUrl / baseUrl / initiate.login.uri on the
+              hub OIDC client. Empty value disables the patch. */}}
+              value: {{ .Values.rbac.bootstrap.hubExternalUrl | default (printf "https://%s" .Values.nebariapp.hostname) | quote }}
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+      volumes:
+        - name: script
+          configMap:
+            name: {{ include "nebari-data-science-pack.fullname" . }}-rbac-bootstrap
+            defaultMode: 0o0555
+{{- end }}

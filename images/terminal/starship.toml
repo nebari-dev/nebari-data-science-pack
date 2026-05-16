@@ -1,0 +1,77 @@
+# Nebari default Starship configuration.
+# Colors are explicit medium-saturation hex (Tailwind 600-level) chosen
+# for contrast on both the JupyterLab Light and Dark terminal palettes.
+# Users can override by setting STARSHIP_CONFIG in their .bashrc.
+
+"$schema" = 'https://starship.rs/config-schema.json'
+
+add_newline = false
+
+format = """
+$env_var$git_branch$git_status$python$conda$cmd_duration$line_break$character"""
+
+# Username — set by the KubeSpawner pre_spawn_hook from the OIDC
+# preferred_username claim (mirrors classic nebari's get_username_hook).
+# Avoids starship's [username] module, which reads $USER (empty in
+# z2jh pods) and falls back to getpwuid → "jovyan".
+[env_var.PREFERRED_USERNAME]
+style = "bold fg:#0d6efd"
+format = '[$env_value]($style) '
+
+# Use the shell's $PWD instead of starship's [directory] module so the
+# prompt shows the full path (e.g. /home/jovyan) instead of the
+# home-abbreviated `~`.
+[env_var.PWD]
+style = "bold fg:#d97706"
+format = '[$env_value]($style) '
+
+[git_branch]
+symbol = ""
+style = "bold fg:#9333ea"
+format = '[($symbol)$branch]($style) '
+
+[git_status]
+style = "bold fg:#dc2626"
+format = '([\($all_status$ahead_behind\)]($style) )'
+
+[python]
+symbol = "py:"
+style = "bold fg:#0d9488"
+format = '[$symbol$version]($style) '
+
+[conda]
+symbol = "env:"
+style = "bold fg:#16a34a"
+format = '[$symbol$environment]($style) '
+ignore_base = false
+
+[cmd_duration]
+min_time = 2000
+style = "bold fg:#ca8a04"
+format = '[took $duration]($style) '
+
+[character]
+success_symbol = '[❯](bold fg:#16a34a)'
+error_symbol = '[❯](bold fg:#dc2626)'
+
+# Disable noisy or duplicate modules
+[username]
+disabled = true
+[directory]
+disabled = true
+[os]
+disabled = true
+[aws]
+disabled = true
+[gcloud]
+disabled = true
+[azure]
+disabled = true
+[docker_context]
+disabled = true
+[kubernetes]
+disabled = true
+[package]
+disabled = true
+[nodejs]
+disabled = true
