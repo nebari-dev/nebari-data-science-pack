@@ -144,7 +144,7 @@ RUN PATH="/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${PATH}" \
 # Wire the @font-face declarations into the page so xterm.js can use the
 # font. Drop the CSS next to the WOFF2 files and add one <link> to index.html.
 COPY terminal/firacode.css ${JLAB_STATIC}/fonts/firacode.css
-RUN sed -i 's|</head>|<link rel="stylesheet" href="/static/lab/fonts/firacode.css"></head>|' \
+RUN sed -i 's|</head>|<link rel="stylesheet" href="{{ base_url | escape }}static/lab/fonts/firacode.css"></head>|' \
     "${JLAB_STATIC}/index.html"
 
 # ========== IBM Plex Sans (default UI + content font) ===========
@@ -155,7 +155,7 @@ RUN sed -i 's|</head>|<link rel="stylesheet" href="/static/lab/fonts/firacode.cs
 RUN PATH="/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${PATH}" \
     /opt/scripts/install-ibm-plex-sans.sh "${JLAB_STATIC}"
 COPY terminal/ibm-plex-sans.css ${JLAB_STATIC}/fonts/ibm-plex-sans.css
-RUN sed -i 's|</head>|<link rel="stylesheet" href="/static/lab/fonts/ibm-plex-sans.css"></head>|' \
+RUN sed -i 's|</head>|<link rel="stylesheet" href="{{ base_url | escape }}static/lab/fonts/ibm-plex-sans.css"></head>|' \
     "${JLAB_STATIC}/index.html"
 RUN mkdir -p /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/settings
 COPY jupyterlab/overrides.json /opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/settings/overrides.json
