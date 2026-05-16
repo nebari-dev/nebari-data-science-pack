@@ -325,15 +325,33 @@ jupyterhub:
       #     - email
       # ============================================================
 
-    # Mount custom config files from ConfigMap
+    # Mount custom config files from ConfigMap + the operator-provisioned
+    # Keycloak OIDC client Secret. 00-gateway-auth.py reads client-id /
+    # client-secret / issuer-url from /etc/oauth/ when KC OAuth is wired.
+    #
+    # IMPORTANT: z2jh treats ``extraVolumes`` and ``extraVolumeMounts`` as
+    # lists that REPLACE (not merge) on override. If a deployer sets either
+    # of these, they MUST re-include the entries below or the hub falls
+    # back to dummy auth and/or jupyterhub_config.d is empty.
+    #
+    # The oauth-client secretName follows the operator's convention:
+    # ``{Release.Name}-{Chart.Name}-oidc-client``. Override here if you
+    # use a non-standard release name.
     extraVolumes:
       - name: custom-config
         configMap:
           name: nebari-data-science-pack-hub-config
+      - name: oauth-client
+        secret:
+          secretName: data-science-pack-nebari-data-science-pack-oidc-client
+          optional: true
 
     extraVolumeMounts:
       - name: custom-config
         mountPath: /usr/local/etc/jupyterhub/jupyterhub_config.d/
+      - name: oauth-client
+        mountPath: /etc/oauth
+        readOnly: true
 
     service:
       extraPorts:
