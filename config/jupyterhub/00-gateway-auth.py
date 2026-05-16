@@ -391,7 +391,7 @@ def configure(
 ):
     """Wire KeyCloakOAuthenticator onto JupyterHub's `c` config object.
 
-    ``realm_api_url`` enables role-gated shared-mount RBAC (issue #2304).
+    ``realm_api_url`` enables role-gated shared-mount RBAC.
     Pass the KC Admin API root for the realm
     (e.g. ``https://kc.example/admin/realms/nebari``); leave empty to
     disable. ``shared_mount_role_name`` is the KC client role whose
@@ -461,7 +461,7 @@ except NameError:
 else:
     if os.environ.get("OAUTH_CALLBACK_URL"):
         _secret_dir = Path(os.environ.get("OAUTH_SECRET_DIR", "/etc/oauth"))
-        # RBAC for role-gated /shared/<group> mounts (issue #2304).
+        # RBAC for role-gated /shared/<group> mounts.
         # Read from env vars on the hub Deployment rather than via
         # z2jh.get_config (which sources from the hub Secret's
         # embedded values.yaml). The Secret is hold-stable by

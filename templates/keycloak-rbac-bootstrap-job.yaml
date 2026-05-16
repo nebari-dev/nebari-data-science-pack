@@ -1,6 +1,6 @@
 {{/*
 One-shot Helm hook that provisions the Keycloak realm config the hub
-needs for role-gated shared-mount RBAC (Nebari issue #2304).
+needs for role-gated shared-mount RBAC.
 
 Runs on post-install AND post-upgrade so chart upgrades pick up newly
 added groups in ``rbac.bootstrap.sharedMountGroups``. Idempotent — every
@@ -55,7 +55,7 @@ spec:
             - name: HUB_CLIENT_ID
               value: {{ .Values.rbac.bootstrap.hubClientId | quote }}
             - name: ROLE_NAME
-              value: {{ index .Values.jupyterhub.custom "rbac-shared-mount-role-name" | quote }}
+              value: {{ .Values.rbac.bootstrap.sharedMountRoleName | quote }}
             - name: SHARED_MOUNT_GROUPS
               value: {{ .Values.rbac.bootstrap.sharedMountGroups | join "," | quote }}
             - name: KC_HOST

@@ -167,7 +167,7 @@ nebi:
   port: 8460
 
 # Helm Job that one-shots Keycloak realm config for role-gated shared
-# mounts (Nebari issue #2304). Runs as a post-install / post-upgrade
+# mounts. Runs as a post-install / post-upgrade
 # hook. Idempotent; skips cleanly if ``kcAdminCredentialSecret`` is
 # unset, so the chart can install on clusters that haven't yet
 # surfaced an admin credential.
@@ -208,6 +208,10 @@ rbac:
     # ClientId of the hub OAuth client in Keycloak (created by the
     # nebari-operator NebariApp). The role + SA roles attach here.
     hubClientId: ""
+    # Name of the client role the Job creates on the hub OIDC client.
+    # Must match ``KC_SHARED_MOUNT_ROLE`` env var on the hub Deployment
+    # (defaults align).
+    sharedMountRoleName: "allow-group-directory-creation-role"
     # KC group paths to assign the shared-mount role to. Each path
     # must already exist in KC. e.g.
     #   - /admin
@@ -240,7 +244,7 @@ jupyterhub:
     shared-storage-enabled: false
     shared-storage-groups: []       # allowlist; empty = all groups from token
     shared-storage-mount-prefix: "/shared"
-    # Role-gated shared-mount RBAC (Nebari issue #2304) configuration
+    # Role-gated shared-mount RBAC configuration
     # is delivered via the hub Deployment's env vars (KC_REALM_API_URL
     # + KC_SHARED_MOUNT_ROLE), NOT via this `custom` block. Reasons:
     #   * `custom.*` is rendered into the z2jh Secret's embedded
