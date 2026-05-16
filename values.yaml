@@ -217,8 +217,13 @@ rbac:
     #   - /admin
     #   - /developer
     sharedMountGroups: []
-    # Image used to run kcadm.sh (matches the realm's Keycloak version).
-    image: "quay.io/keycloak/keycloak:24.0.5"
+    # Keycloak server URL the bootstrap script talks to (Admin REST API
+    # lives at ``<kcHost>/admin/realms/...``). In-cluster service URL by
+    # default; override if Keycloak sits at a different hostname.
+    kcHost: "http://keycloak-keycloakx-http.keycloak.svc.cluster.local:8080"
+    # Image that runs ``files/keycloak_rbac_bootstrap.py``. The script
+    # uses only the standard library, so any small Python image works.
+    image: "python:3.12-slim"
 
 # JupyterHub configuration
 # All values under this key are passed to the jupyterhub subchart
