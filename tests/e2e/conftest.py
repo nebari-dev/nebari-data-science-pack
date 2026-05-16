@@ -78,6 +78,18 @@ def dump_diagnostics_on_failure(request):
 
 @pytest.fixture(scope="session")
 def cluster():
+    # SKIP_CLUSTER_SETUP=1 means the CI workflow (or a wrapper script)
+    # has already created the kind cluster, installed the chart, patched
+    # the NFS hosts entry, and waited for the hub. Required for
+    # pytest-xdist runs: every xdist worker has its own pytest session,
+    # so without this flag all N workers would race on `helm upgrade
+    # --install` against the same release and 3-of-4 would fail.
+    if os.environ.get("SKIP_CLUSTER_SETUP"):
+        log.info("SKIP_CLUSTER_SETUP=1; assuming kind + helm already up")
+        require_binaries("kind", "helm", "kubectl")
+        yield CLUSTER
+        return
+
     TOTAL = 6
     step(1, TOTAL, "verify required binaries on PATH")
     require_binaries("kind", "helm", "kubectl")

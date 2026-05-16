@@ -104,16 +104,36 @@ jobs:
       - name: Side-load singleuser image into kind node
         run: kind load image-archive "${{ needs.prep.outputs.tar }}" --name nbtest-e2e
 
+      # Setup runs ONCE here (outside pytest) so xdist workers don't
+      # race on helm install against the same release. SKIP_CLUSTER_SETUP
+      # tells the conftest cluster fixture to assume the cluster is up.
+      - name: Install chart + wait for hub
+        run: |
+          helm dependency update
+          helm upgrade --install ds . --namespace default \
+            --set nebariapp.enabled=false \
+            --values tests/e2e/fixtures/test-values.yaml
+          # Match conftest's kind /etc/hosts NFS workaround. The release
+          # name "ds" matches RELEASE in conftest.
+          NFS_IP=$(kubectl get svc ds-nebari-data-science-pack-nfs -o jsonpath='{.spec.clusterIP}' || true)
+          if [ -n "$NFS_IP" ]; then
+            docker exec nbtest-e2e-control-plane sh -c \
+              "grep -q ds-nebari-data-science-pack-nfs /etc/hosts || \
+               echo '$NFS_IP ds-nebari-data-science-pack-nfs.default.svc.cluster.local' >> /etc/hosts"
+          fi
+          kubectl wait --for=condition=Ready pod -l component=hub --timeout=300s
+          kubectl wait --for=condition=Ready pod -l component=proxy --timeout=180s
+
       - name: Run e2e tests (xdist -n 4)
         env:
           KIND_CLUSTER: nbtest-e2e
           KIND_KEEP: "1"
+          SKIP_CLUSTER_SETUP: "1"
           PYTHONUNBUFFERED: "1"
         # pytest-xdist runs tests in parallel worker processes; each
         # worker spawns its own user via the spawn_user fixture so the
         # hub handles N concurrent pod creations. --dist=loadfile keeps
-        # tests from the same file on the same worker — preserves any
-        # per-file fixture state if it's added later. -n 4 matches the
+        # tests from the same file on the same worker. -n 4 matches the
         # runner's vCPU count and leaves RAM headroom for the kind
         # control plane + hub + proxy + 4 user pods.
         run: uvx --with pytest-xdist pytest tests/e2e -v --color=yes -n 4 --dist=loadfile --durations=10
