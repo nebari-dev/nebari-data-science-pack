@@ -126,5 +126,34 @@ RUN --mount=from=nebi-source,dst=/nebi-source \
         | tar -xz -C /usr/local/bin nebi; \
     fi
 
+# ========== terminal customization ===========
+# Install Starship prompt (multi-arch: amd64/arm64). Colors use ANSI
+# names so xterm.js maps them through the JupyterLab terminal palette,
+# adapting to both light and dark themes automatically.
+ARG STARSHIP_VERSION=1.24.2
+RUN curl -fsSL "https://github.com/starship/starship/releases/download/v${STARSHIP_VERSION}/starship-$(uname -m)-unknown-linux-musl.tar.gz" \
+    | tar -xz -C /usr/local/bin starship \
+    && chmod +x /usr/local/bin/starship
+
+# Install plain Fira Code (no Nerd Font glyphs) for the JupyterLab terminal.
+# unzip is from the pixi env; put it on PATH for this RUN.
+ARG JLAB_STATIC=/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/share/jupyter/lab/static
+RUN PATH="/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${PATH}" \
+    /opt/scripts/install-firacode.sh "${JLAB_STATIC}"
+
+# Wire the @font-face declarations into the page so xterm.js can use the
+# font. Drop the CSS next to the WOFF2 files and add one <link> to index.html.
+COPY terminal/firacode.css ${JLAB_STATIC}/fonts/firacode.css
+RUN sed -i 's|</head>|<link rel="stylesheet" href="/static/lab/fonts/firacode.css"></head>|' \
+    "${JLAB_STATIC}/index.html"
+
+COPY terminal/bashrc /etc/skel/.bashrc
+COPY terminal/nebari-terminal.sh /etc/profile.d/nebari-terminal.sh
+COPY terminal/starship.toml /etc/starship.toml
+
+# Terminal font via user-settings (overrides JupyterLab's hardcoded default).
+RUN mkdir -p /etc/skel/.jupyter/lab/user-settings/@jupyterlab/terminal-extension
+COPY terminal/terminal-settings.json /etc/skel/.jupyter/lab/user-settings/@jupyterlab/terminal-extension/plugin.jupyterlab-settings
+
 COPY nebi/jupyter_server_config.py /usr/local/etc/jupyter/jupyter_server_config.py
 COPY nebi/icons /usr/local/etc/jupyter/icons
