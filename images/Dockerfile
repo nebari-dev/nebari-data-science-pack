@@ -144,8 +144,23 @@ RUN PATH="/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${PATH}" \
 # Wire the @font-face declarations into the page so xterm.js can use the
 # font. Drop the CSS next to the WOFF2 files and add one <link> to index.html.
 COPY terminal/firacode.css ${JLAB_STATIC}/fonts/firacode.css
-RUN sed -i 's|</head>|<link rel="stylesheet" href="/static/lab/fonts/firacode.css"></head>|' \
+RUN sed -i 's#</head>#<link rel="stylesheet" href="{{ base_url | escape }}static/lab/fonts/firacode.css"></head>#' \
     "${JLAB_STATIC}/index.html"
+
+# ========== IBM Plex Sans (default UI + content font) ===========
+# Install woff2 files + @font-face CSS, then point JupyterLab's themes
+# at the family via user-settings. NOTE: app-settings/overrides.json
+# does NOT work for theme overrides — apputils-extension reads
+# `settings.user.overrides` (not `composite.overrides`), so the admin
+# override path is bypassed. User-settings is the path that actually
+# applies these CSS variables.
+RUN PATH="/opt/jupyterlab/.pixi/envs/${DEFAULT_ENV}/bin:${PATH}" \
+    /opt/scripts/install-ibm-plex-sans.sh "${JLAB_STATIC}"
+COPY terminal/ibm-plex-sans.css ${JLAB_STATIC}/fonts/ibm-plex-sans.css
+RUN sed -i 's#</head>#<link rel="stylesheet" href="{{ base_url | escape }}static/lab/fonts/ibm-plex-sans.css"></head>#' \
+    "${JLAB_STATIC}/index.html"
+RUN mkdir -p /etc/skel/.jupyter/lab/user-settings/@jupyterlab/apputils-extension
+COPY terminal/themes-settings.json /etc/skel/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings
 
 COPY terminal/bashrc /etc/skel/.bashrc
 COPY terminal/nebari-terminal.sh /etc/profile.d/nebari-terminal.sh
