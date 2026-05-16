@@ -208,16 +208,31 @@ def test_fresh_provision_applies_every_step(
     assert client["serviceAccountsEnabled"] is True
 
     # 3. Realm-management roles bound to the SA user.
+    #
+    # Some role names in REALM_MGMT_ROLES were renamed/merged in newer
+    # KC versions (e.g. ``view-groups`` is absent in KC 26.x). The
+    # bootstrap intentionally skips roles that don't exist on this KC
+    # — what we pin here is "every role the script *could* bind, it
+    # *did* bind." Compute that subset from the live realm-management
+    # client rather than hardcoding to a specific KC version.
     sa_user_id = kc.get_service_account_user_id(realm, scratch.client_uuid)
     rm_uuid = kc.get_client_uuid(realm, "realm-management")
+    available = {
+        r["name"]
+        for r in (kc._request("GET", f"/{realm}/clients/{rm_uuid}/roles") or [])
+    }
+    expected = set(rbac.REALM_MGMT_ROLES) & available
+    assert expected, (
+        f"realm-management client has none of {rbac.REALM_MGMT_ROLES} — "
+        f"KC role-name list has drifted, the bootstrap needs updating"
+    )
     bindings = kc._request(
         "GET",
         f"/{realm}/users/{sa_user_id}/role-mappings/clients/{rm_uuid}",
     ) or []
     bound = {b["name"] for b in bindings}
-    assert set(rbac.REALM_MGMT_ROLES).issubset(bound), (
-        f"SA missing realm-management roles; have {bound}, "
-        f"want {rbac.REALM_MGMT_ROLES}"
+    assert expected.issubset(bound), (
+        f"SA missing realm-management roles; have {bound}, want {expected}"
     )
 
     # 4. The shared-directory client role exists with the required attrs.
