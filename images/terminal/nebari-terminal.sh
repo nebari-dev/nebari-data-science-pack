@@ -7,15 +7,11 @@ if [ "${NEBARI_TERMINAL_CUSTOMIZATION}" = "false" ]; then
     return 0 2>/dev/null || exit 0
 fi
 
-# Auto-detect JupyterLab theme. The nerd-font-loader.js writes "dark" or "light"
-# to /tmp/.starship-theme. Use matching Catppuccin palette config.
+# Use ANSI color names so the prompt adapts to JupyterLab's
+# terminal palette automatically (light/dark theme switch).
 # Users can override by setting STARSHIP_CONFIG in their .bashrc.
 if [ -z "${STARSHIP_CONFIG}" ]; then
-    if [ -f /tmp/.starship-theme ] && grep -q "light" /tmp/.starship-theme 2>/dev/null; then
-        export STARSHIP_CONFIG="/etc/starship-light.toml"
-    else
-        export STARSHIP_CONFIG="/etc/starship.toml"
-    fi
+    export STARSHIP_CONFIG="/etc/starship.toml"
 fi
 
 if command -v starship &> /dev/null; then
