@@ -12,8 +12,7 @@ Public contract (chart-side):
   The role is identified by:
     * configurable role name (default: ``shared-directory-mount``)
     * fixed attribute pair ``component=shared-directory``,
-      ``scopes=write:shared-mount`` (mirrors classic nebari so realm-
-      setup tooling can be shared)
+      ``scopes=write:shared-mount``
 
   When the realm-admin path is unavailable (KC down, no permissions,
   service-account misconfigured), the user STILL logs in — they just
@@ -434,9 +433,9 @@ def test_refresh_user_skips_rbac_when_realm_api_url_empty():
 def test_configure_propagates_realm_api_url_and_role_name():
     """The chart's configure() entrypoint must accept realm_api_url +
     shared_mount_role_name and set them so the authenticator's
-    update_auth_model knows where to call. Default role name should
-    match classic nebari ('allow-group-directory-creation-role') so a
-    realm provisioned by the classic playbook works out of the box."""
+    update_auth_model knows where to call. Default role name
+    ``allow-group-directory-creation-role`` is the stable identifier
+    realm-setup tooling expects."""
     c = ga.KeyCloakOAuthenticator.kc_config  # may be stale from earlier tests
     # Build a FakeConfig-like object: namespace per traitlets class.
     cfg = types.SimpleNamespace(

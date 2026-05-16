@@ -227,8 +227,9 @@ class KeyCloakOAuthenticator(GenericOAuthenticator):
     # Name of the KC client role that grants /shared/<group> mount
     # permission. The role must carry attributes
     # component=["shared-directory"] and scopes=["write:shared-mount"].
-    # Default matches classic nebari's role name so realm-setup tooling
-    # (deployment tests, kcadm scripts) stays compatible.
+    # Default name kept stable so existing realm-setup tooling
+    # (kcadm scripts, deployment tests) does not need to be edited
+    # to recognise the role.
     shared_mount_role_name = Unicode(
         "allow-group-directory-creation-role", config=True,
     )

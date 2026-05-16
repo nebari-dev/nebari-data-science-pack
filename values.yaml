@@ -179,8 +179,7 @@ nebi:
 #   2. Creates the ``allow-group-directory-creation-role`` client
 #      role on the hub OIDC client with attributes
 #      ``component=shared-directory`` and
-#      ``scopes=write:shared-mount`` (same role classic nebari
-#      provisions).
+#      ``scopes=write:shared-mount``.
 #   3. Grants the hub client ``serviceAccountsEnabled=true`` and
 #      binds ``realm-management.{view-clients,view-groups,view-realm}``
 #      to its service account.
