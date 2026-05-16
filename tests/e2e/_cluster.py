@@ -93,12 +93,23 @@ def patch_nfs_hosts_entry(release, cluster_name):
 
     Production clusters don't need this — their kubelets have cluster DNS.
     """
-    rc, pv_name, _ = kctl_out(
-        "get", "pv", "-l", f"app.kubernetes.io/instance={release}",
-        "-o", "jsonpath={.items[?(@.spec.nfs)].metadata.name}",
-    )
+    # On a freshly-helm-installed cluster the PV controller can take
+    # 20-60s to bind the NFS PV. Poll up to ~90s; each kctl_out call
+    # has its own 10s default timeout (kubectl itself is allowed to
+    # stall while the API server is still warming up on cold kind).
+    pv_name = ""
+    deadline = time.time() + 90
+    while time.time() < deadline:
+        rc, pv_name, _ = kctl_out(
+            "get", "pv", "-l", f"app.kubernetes.io/instance={release}",
+            "-o", "jsonpath={.items[?(@.spec.nfs)].metadata.name}",
+            timeout=15,
+        )
+        if pv_name:
+            break
+        time.sleep(2)
     if not pv_name:
-        log.info("no NFS-backed PV found — skipping hosts entry")
+        log.info("no NFS-backed PV found after 90s — skipping hosts entry")
         return
 
     _, fqdn, _ = kctl_out("get", "pv", pv_name,
