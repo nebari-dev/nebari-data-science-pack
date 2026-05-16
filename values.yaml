@@ -264,7 +264,7 @@ jupyterhub:
     profiles:
       - slug: small-instance
         display_name: "Small Instance"
-        description: "1 CPU / 2 GB RAM"
+        description: "1 CPU / 2 GB RAM — interactive notebooks, light data exploration, teaching."
         default: true
         kubespawner_override:
           cpu_limit: 1
@@ -273,7 +273,7 @@ jupyterhub:
           mem_guarantee: "1G"
       - slug: medium-instance
         display_name: "Medium Instance"
-        description: "4 CPU / 8 GB RAM"
+        description: "4 CPU / 8 GB RAM — pandas / scikit-learn workloads on medium datasets."
         kubespawner_override:
           cpu_limit: 4
           cpu_guarantee: 2
