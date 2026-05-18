@@ -1,4 +1,3 @@
-{{- include "nebari-data-science-pack.validateSharedStorage" . }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -36,6 +35,8 @@ data:
 
     from z2jh import get_config as _z2jh_get_config
 
+    _MISSING = object()
+
     _CHART_DERIVED = {
         "external-url": {{ $hubHost | quote }},
         "nebi-image": {{ include "nebari-data-science-pack.nebiImage" . | quote }},
@@ -44,6 +45,10 @@ data:
         "keycloak-token-url": {{ include "nebari-data-science-pack.keycloakTokenURL" . | quote }},
         "nebi-client-id": {{ include "nebari-data-science-pack.nebiClientID" . | quote }},
         "jupyterhub-client-id": {{ include "nebari-data-science-pack.hubClientID" . | quote }},
+        # Mirrors .Values.sharedStorage.enabled so deployers don't have to set
+        # both. Deployer override via jupyterhub.custom.shared-storage-enabled
+        # still wins via z2jh.
+        "shared-storage-enabled": {{ ternary "True" "False" .Values.sharedStorage.enabled }},
     }
 
 
@@ -51,14 +56,17 @@ data:
         """Read `jupyterhub.custom.<key>` with chart-rendered fallback.
 
         Order of precedence:
-          1. Deployer override in `jupyterhub.custom.<key>`
+          1. Deployer override in `jupyterhub.custom.<key>` (any value,
+             including falsy ones like False or 0, wins via sentinel check)
           2. Helm-rendered default from this chart (see _CHART_DERIVED above)
           3. `default` argument
         """
-        value = _z2jh_get_config(f"custom.{key}", "")
-        if value:
+        value = _z2jh_get_config(f"custom.{key}", _MISSING)
+        if value is not _MISSING:
             return value
-        return _CHART_DERIVED.get(key) or default
+        if key in _CHART_DERIVED:
+            return _CHART_DERIVED[key]
+        return default
   00-gateway-auth.py: |
 {{ $gatewayAuthPy | indent 4 }}
   01-spawner.py: |

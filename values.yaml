@@ -106,6 +106,29 @@ nebariapp:
       timeoutSeconds: 5
 
 # =============================================================================
+# =============================================================================
+# Singleuser top-level chart options
+# =============================================================================
+# Network access toggles for singleuser pods that the jupyterhub subchart's
+# own NetworkPolicy doesn't cover. Each rule below is rendered as its own
+# NetworkPolicy and unioned with the subchart's policy (Kubernetes
+# NetworkPolicy semantics).
+singleuser:
+  networkPolicy:
+    # Lets singleuser pods reach the Nebari gateway pod (Envoy Gateway proxy)
+    # in its own namespace. Required on Hetzner k3s + any cluster where
+    # kube-proxy DNATs the LoadBalancer VIP to the proxy pod IP BEFORE the
+    # subchart's pod-level NetworkPolicy is evaluated — without this, pods
+    # cannot resolve `https://<hub>/services/japps` or `https://<nebi-host>`
+    # via the cluster's external IP. Set true to enable.
+    allowEgressToGateway: false
+    # Override these only if the operator's gateway is not at the standard
+    # location (envoy-gateway-system / nebari-gateway / port 10443).
+    gatewayNamespace: envoy-gateway-system
+    gatewayName: nebari-gateway
+    gatewayPort: 10443
+
+# =============================================================================
 # Singleuser Idle Culler
 # =============================================================================
 # Configures idle culling inside each user pod. This is separate from the
@@ -382,9 +405,10 @@ jupyterhub:
     # Terminal customization: controls Starship prompt in JupyterLab terminals.
     # When false, falls back to the default bash prompt.
     terminal-customization: true
-    # Shared storage — MUST match top-level sharedStorage.* values exactly.
-    # helm template will fail if sharedStorage.enabled and shared-storage-enabled diverge.
-    shared-storage-enabled: false
+    # Shared storage. shared-storage-enabled auto-mirrors the top-level
+    # sharedStorage.enabled (rendered by the chart into 00-chart-derived.py)
+    # so deployers no longer need to set it. Override here only to force a
+    # specific value independent of the PVC/StorageClass setup.
     shared-storage-groups: []       # allowlist; empty = all groups from token
     shared-storage-mount-prefix: "/shared"
     # Role-gated shared-mount RBAC configuration
@@ -409,13 +433,19 @@ jupyterhub:
     # See https://jhub-apps.nebari.dev/docs/configuration for available options.
     japps-config:
       hub_host: "hub"
-      service_workers: 4
+      # 1 uvicorn worker — 4 workers take ~12s to bind, beyond hub's
+      # hardcoded 10s wait_for_http_server timeout for managed services
+      # → CrashLoopBackOff. 1 worker boots in ~3s and handles small UI load
+      # fine for most deployments. Bump if you have many concurrent users.
+      service_workers: 1
       # app_title: "JHub Apps Launcher"
       # app_icon: ""
       # conda_envs: []
       # allowed_frameworks: []
       # blocked_frameworks: []
-      # additional_services: []
+      # additional_services: []  # Chart auto-injects a Nebi card when
+      #                          # nebi.remoteURL is set/derivable. Override
+      #                          # here to add more or replace the default.
       # startup_apps: []
   hub:
     # Custom Nebari hub image with jhub-apps pre-installed.

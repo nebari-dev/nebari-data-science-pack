@@ -37,6 +37,26 @@ c.JAppsConfig.jupyterhub_config_path = "/usr/local/etc/jupyterhub/jupyterhub_con
 #     service_workers: 2
 #     allowed_frameworks: ["panel", "streamlit"]
 japps_config = get_config("custom.japps-config", {})
+
+# Auto-inject a Nebi card into additional_services when nebi-remote-url is
+# set/derivable and the deployer hasn't already declared additional_services.
+# Deployer override (passing additional_services in japps-config) wins.
+_nebi_remote = get_chart_config("nebi-remote-url")
+if _nebi_remote and "additional_services" not in japps_config:
+    japps_config = {
+        **japps_config,
+        "additional_services": [{
+            "name": "Nebi",
+            "url": _nebi_remote,
+            "description": "Workspace & environment management",
+            "pinned": True,
+            "thumbnail": (
+                "https://raw.githubusercontent.com/nebari-dev/nebi/"
+                "6b6cef63c67dafd7444f1a3940a0ef8f1dcebb31/assets/nebi-icon.png"
+            ),
+        }],
+    }
+
 for key, value in japps_config.items():
     setattr(c.JAppsConfig, key, value)
 

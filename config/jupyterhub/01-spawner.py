@@ -101,7 +101,7 @@ c.KubeSpawner.extra_pod_config = {
 # When enabled, mount the shared-storage PVC so users can collaborate via
 # /shared/<group>. Group-specific subPaths and init containers are added
 # dynamically in _setup_shared_storage() at spawn time based on group membership.
-shared_storage_enabled = get_config("custom.shared-storage-enabled", False)
+shared_storage_enabled = get_chart_config("shared-storage-enabled", False)
 shared_storage_groups_allowlist = get_config("custom.shared-storage-groups", [])
 shared_storage_mount_prefix = get_config("custom.shared-storage-mount-prefix", "/shared")
 
