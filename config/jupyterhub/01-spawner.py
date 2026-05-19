@@ -69,16 +69,26 @@ c.KubeSpawner.volume_mounts = [
 c.KubeSpawner.notebook_dir = "/home/jovyan"
 c.KubeSpawner.working_dir = "/home/jovyan"
 
-# Co-locate all pods for the same user on the same node.
+# affinity — co-locate all pods for the same user on the same node.
 # hcloud-volumes is ReadWriteOnce — only one node can mount it at a time.
 # Pod affinity ensures jhub-apps app pods land on the same node as the
 # user's JupyterLab pod so the shared home PVC can be mounted by all of them.
 #
-# fsGroupChangePolicy: OnRootMismatch — the kubelet's default recursive chown
-# of every file on the home PVC to match fsGroup (GID 100, set via fs_gid below)
-# can take 30-150s on PVCs with large pixi envs / model caches and time out the
-# spawn. OnRootMismatch only chowns when the root dir's GID is wrong, so the
-# cost is paid once and skipped on subsequent spawns.
+# securityContext.fsGroup: 100 — GID 100 (users group) as the pod's fsGroup.
+# Kubernetes adds GID 100 as a supplemental group and chgrps mounted volumes
+# to 100 at pod start. This ensures shared dirs (created by init container as
+# root:root) become root:100, writable by every member of the users group.
+#
+# securityContext.fsGroupChangePolicy: OnRootMismatch — the kubelet's default
+# recursive chown of every file on the home PVC to match fsGroup can take
+# 30-150s on PVCs with large pixi envs / model caches and time out the spawn.
+# OnRootMismatch only chowns when the root dir's GID is wrong, so the cost is
+# paid once and skipped on subsequent spawns.
+#
+# fsGroup is set here (not via c.KubeSpawner.fs_gid) because kubespawner's
+# extra_pod_config applies pod.spec attributes with a top-level overwrite —
+# any securityContext we set here REPLACES the one fs_gid would produce, so
+# both fields must live in this dict together.
 c.KubeSpawner.extra_pod_config = {
     "affinity": {
         "podAffinity": {
@@ -99,6 +109,7 @@ c.KubeSpawner.extra_pod_config = {
         }
     },
     "securityContext": {
+        "fsGroup": 100,
         "fsGroupChangePolicy": "OnRootMismatch",
     },
 }
@@ -119,16 +130,6 @@ if shared_storage_enabled:
         "name": "shared",
         "persistentVolumeClaim": {"claimName": "shared-storage"},
     })
-
-# GID 100 (users group) as the fsGroup for all singleuser pods.
-# Kubernetes applies this as securityContext.fsGroup, which:
-#   1. Adds GID 100 as a supplemental group for the process
-#   2. chgrp -R 100 on all mounted volumes at pod start
-# This ensures shared dirs (created by init container as root:root) become
-# root:100, making them writable by users who have GID 100. Without this
-# being explicit, the behavior relies silently on the z2jh subchart default.
-c.KubeSpawner.fs_gid = 100
-
 
 # ---------------------------------------------------------------------------
 # Nebi binary (init container)
