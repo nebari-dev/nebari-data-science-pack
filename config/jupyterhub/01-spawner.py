@@ -73,6 +73,12 @@ c.KubeSpawner.working_dir = "/home/jovyan"
 # hcloud-volumes is ReadWriteOnce — only one node can mount it at a time.
 # Pod affinity ensures jhub-apps app pods land on the same node as the
 # user's JupyterLab pod so the shared home PVC can be mounted by all of them.
+#
+# fsGroupChangePolicy: OnRootMismatch — the kubelet's default recursive chown
+# of every file on the home PVC to match fsGroup (GID 100, set via fs_gid below)
+# can take 30-150s on PVCs with large pixi envs / model caches and time out the
+# spawn. OnRootMismatch only chowns when the root dir's GID is wrong, so the
+# cost is paid once and skipped on subsequent spawns.
 c.KubeSpawner.extra_pod_config = {
     "affinity": {
         "podAffinity": {
@@ -91,7 +97,10 @@ c.KubeSpawner.extra_pod_config = {
                 }
             ]
         }
-    }
+    },
+    "securityContext": {
+        "fsGroupChangePolicy": "OnRootMismatch",
+    },
 }
 
 
