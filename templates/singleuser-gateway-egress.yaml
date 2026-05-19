@@ -1,0 +1,40 @@
+{{- /*
+NetworkPolicy that lets singleuser pods reach the Nebari gateway pod
+(Envoy Gateway proxy) in its own namespace. Needed on clusters where
+kube-proxy DNATs the LoadBalancer VIP to the proxy pod IP BEFORE the
+subchart's pod-level NetworkPolicy is evaluated — without this rule,
+singleuser pods cannot resolve https://<hub>/services/japps or
+https://<nebi-host> via the cluster's external IP. Observed on Hetzner
+k3s; harmless elsewhere.
+
+Additive: Kubernetes NetworkPolicy semantics union egress rules across
+policies that select the same pod, so this does not replace the
+subchart's policy.
+*/}}
+{{- if .Values.singleuser.networkPolicy.allowEgressToGateway }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "nebari-data-science-pack.name" . }}-singleuser-gateway-egress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nebari-data-science-pack.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: jupyterhub
+      component: singleuser-server
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.singleuser.networkPolicy.gatewayNamespace | default "envoy-gateway-system" }}
+          podSelector:
+            matchLabels:
+              gateway.envoyproxy.io/owning-gateway-name: {{ .Values.singleuser.networkPolicy.gatewayName | default "nebari-gateway" }}
+      ports:
+        - port: {{ .Values.singleuser.networkPolicy.gatewayPort | default 10443 }}
+          protocol: TCP
+{{- end }}
