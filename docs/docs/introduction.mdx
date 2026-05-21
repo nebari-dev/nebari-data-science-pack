@@ -1,0 +1,120 @@
+---
+title: Introduction
+description: An overview of the Nebari Data Science Pack — deploy JupyterHub with jhub-apps on Kubernetes, with Nebari-aware defaults for routing, auth, and shared storage.
+slug: /
+sidebar_position: 1
+---
+
+import DocCardList from '@theme/DocCardList';
+
+# Introduction
+
+## What is the Nebari Data Science Pack?
+
+**The Nebari Data Science Pack is a Nebari Software Pack that deploys
+[JupyterHub](https://z2jh.jupyter.org/) with
+[jhub-apps](https://jhub-apps.nebari.dev/) on Kubernetes.**
+It packages the [Zero to JupyterHub](https://z2jh.jupyter.org/) Helm chart,
+the jhub-apps integration for deploying data science applications, and the
+optional routing / TLS / OIDC layer provided by
+[nebari-operator](https://github.com/nebari-dev/nebari-operator) into a
+single Helm chart.
+
+Once installed, users on the cluster get a JupyterLab environment with
+per-group shared storage, profile-based resource sizing, and (optionally)
+single sign-on against the Nebari Keycloak.
+
+## Why use this pack?
+
+Standing up a production JupyterHub on Kubernetes typically involves:
+
+- Templating the upstream z2jh chart with the right hub image, custom
+  config files, profile list, and culler settings.
+- Adding jhub-apps to the hub container and wiring its service port
+  through the proxy NetworkPolicy.
+- Building an ingress with TLS and bolting OIDC auth onto JupyterHub's
+  `GenericOAuthenticator` against Keycloak.
+- Wiring per-group shared directories that require an `ReadWriteMany`
+  StorageClass that most cloud providers do not ship with.
+
+The pack does all of this for you, with defaults aimed at notebook users
+on a Nebari cluster. Install one chart and users get JupyterLab,
+jhub-apps, and (optionally) a Keycloak-backed login the same day.
+
+## Key features
+
+- **One-chart install** — z2jh JupyterHub, jhub-apps, hub config files,
+  and the rest of the supporting Kubernetes resources come up from a
+  single Helm release.
+- **Nebari-aware defaults** — when `nebariapp.enabled: true` the chart
+  emits a NebariApp resource that the nebari-operator picks up to
+  provision Envoy Gateway routing, TLS, and the Keycloak OIDC client.
+- **jhub-apps integration** — the hub image ships with
+  [jhub-apps](https://jhub-apps.nebari.dev/) pre-installed and the chart
+  wires the `JAppsConfig`, service port, and proxy NetworkPolicy.
+- **Per-group shared storage** — `/shared/<group>` directories appear in
+  every user pod, backed by a `ReadWriteMany` PVC. A transitional
+  in-cluster NFS server is included for clusters without a native RWX
+  StorageClass.
+- **Nebi integration** — when the
+  [nebi-pack](https://github.com/nebari-dev/nebari-nebi-pack) is also
+  installed, set `nebi.remoteURL` and JupyterLab pods auto-connect to
+  the Nebi team server using the user's Keycloak token.
+
+## Who this is for
+
+- **Operators** installing the pack on a Kubernetes or Nebari cluster
+  → [Get started](./get-started/) walks through the standalone and
+  GitOps install paths.
+- **End users** on a cluster that already has the pack installed
+  → [How-to guides](./how-tos/) covers launching a server, picking a
+  profile, and deploying apps through jhub-apps.
+- **Anyone curious about how it fits together** →
+  [Architecture](./references/architecture) explains the Kubernetes
+  resources the chart creates and how they relate.
+
+## What this pack is not
+
+The pack is tuned for **interactive notebook + jhub-apps workloads** on
+Nebari. It is not a generic JupyterHub distribution — it pins a Nebari
+hub image with jhub-apps pre-installed, ships Keycloak-OAuthenticator
+wiring, and assumes the nebari-operator manages routing in production.
+For model serving (Ray Serve / HTTP endpoints) use the
+[Ray Serve pack](https://github.com/nebari-dev/nebari-rayserve-pack)
+instead.
+
+## At a glance
+
+| | |
+|---|---|
+| Upstream JupyterHub chart | [`jupyterhub` 4.3.2](https://hub.jupyter.org/helm-chart/) |
+| jhub-apps | pre-installed in the Nebari hub image |
+| Default authenticator | `dummy` (any username/password — for local dev) |
+| Production authenticator | `GenericOAuthenticator` against Keycloak |
+| Default access pattern | `kubectl port-forward` (standalone), Envoy Gateway HTTPS (Nebari) |
+| Shared storage | per-group `/shared/<group>` on a `ReadWriteMany` PVC |
+| Maturity | experimental |
+| Source | [github.com/nebari-dev/nebari-data-science-pack](https://github.com/nebari-dev/nebari-data-science-pack) |
+
+## Next steps
+
+<DocCardList items={[
+  {
+    type: 'link',
+    href: '/get-started/',
+    label: 'Get started',
+    description: 'Install the pack on a standalone cluster or via ArgoCD on Nebari.',
+  },
+  {
+    type: 'link',
+    href: '/how-tos/',
+    label: 'How-to guides',
+    description: 'Launch a notebook, choose a profile, deploy apps through jhub-apps.',
+  },
+  {
+    type: 'link',
+    href: '/references/',
+    label: 'Reference',
+    description: 'Full values.yaml reference, architecture diagrams, and the troubleshooting index.',
+  },
+]}/>
