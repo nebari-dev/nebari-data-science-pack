@@ -8,11 +8,22 @@ sidebar_position: 2
 
 This guide is for **operators** installing the pack on a Kubernetes
 cluster. End users connecting to an already-deployed cluster should read
-[Use the pack from a notebook](../how-tos/use) instead.
+[Use the pack from a notebook](../how-tos/use_pack_from_notebook) instead.
+
+:::note[Defaults reflect chart v0.1.0-alpha.13]
+
+Image tags, subchart versions, and other defaults cited below match
+[`Chart.yaml`](https://github.com/nebari-dev/nebari-data-science-pack/blob/main/Chart.yaml)
+and [`values.yaml`](https://github.com/nebari-dev/nebari-data-science-pack/blob/main/values.yaml)
+on `main`. Check the repo for the latest pinned versions before copying
+examples verbatim.
+
+:::
 
 The pack deploys:
 
-- The **JupyterHub** subchart ([z2jh](https://z2jh.jupyter.org/) 4.3.2).
+- The **JupyterHub** subchart ([z2jh](https://z2jh.jupyter.org/)) — exact
+  version pinned in [`Chart.yaml`](https://github.com/nebari-dev/nebari-data-science-pack/blob/main/Chart.yaml).
 - A custom Nebari hub image with **jhub-apps** pre-installed and the hub
   config files (`00-gateway-auth.py`, `01-spawner.py`, `02-jhub-apps.py`,
   `03-nebi-envs.py`) mounted in.
@@ -27,7 +38,7 @@ The pack deploys:
 
 ## Prerequisites
 
-| | |
+| Requirement | Details |
 |---|---|
 | Kubernetes | 1.25+; [kind](https://kind.sigs.k8s.io/) / [k3d](https://k3d.io/) work for local dev |
 | Tooling | [`kubectl`](https://kubernetes.io/docs/tasks/tools/), [Helm 3](https://helm.sh/docs/intro/install/) |
@@ -114,6 +125,13 @@ spec:
         nebariapp:
           enabled: true
           hostname: jupyter.your-cluster.example.com
+          routing:
+            routes:
+              # Explicit catch-all route. Some nebari-operator builds
+              # don't synthesize a default route from `service:` alone;
+              # if you skip this and see the hostname returning 404 with
+              # `RoutingReady: True`, it's almost always this.
+              - pathPrefix: /
           auth:
             enabled: true
             provider: keycloak
@@ -174,154 +192,13 @@ Envoy-level OIDC.
 
 ## Configuration
 
-The full reference — every chart value with its type, default, and
-description — lives at [Reference → `values.yaml` reference](../references/values).
-The tables below cover the knobs you'll most often touch when installing.
+Configuring the chart — NebariApp / external access, profiles, shared
+storage, Keycloak OAuth, Keycloak RBAC bootstrap, Nebi integration —
+lives on its own page so the install flow stays focused. See
+**[Configuration guide](./configuration_guide)**.
 
-### NebariApp / external access
-
-| Value | Default | Description |
-|---|---|---|
-| `nebariapp.enabled` | `true` | Create the NebariApp resource for routing / TLS / auth |
-| `nebariapp.hostname` | — | Hostname for the hub (required when `nebariapp.enabled`) |
-| `nebariapp.service.name` | `proxy-public` | JupyterHub proxy service |
-| `nebariapp.service.port` | `80` | Proxy service port |
-| `nebariapp.auth.enabled` | `true` | Require Keycloak OIDC for external access |
-| `nebariapp.auth.redirectURI` | `/hub/oauth_callback` | OAuth callback — must match the hub's, not Envoy's, callback path |
-| `nebariapp.auth.enforceAtGateway` | `false` | Run Envoy's OIDC filter at the gateway (off by default — see warning above) |
-| `nebariapp.auth.forwardAccessToken` | `false` | Have Envoy forward the upstream Bearer token (off — hub owns the OAuth flow) |
-| `nebariapp.landingPage.enabled` | `false` | Add JupyterHub to the Nebari home page tile grid |
-
-### Profiles (resource sizing)
-
-The chart ships two profiles in `jupyterhub.custom.profiles`:
-
-| Slug | Default | Resources | Use case |
-|---|---|---|---|
-| `small-instance` | yes | 1 CPU / 2 GB RAM | interactive notebooks, light data exploration, teaching |
-| `medium-instance` | no | 4 CPU / 8 GB RAM | pandas / scikit-learn on medium datasets |
-
-Each entry maps directly to a KubeSpawner `profile_list` item; slugs are
-derived from `display_name` via z2jh's slugify. Override the list to add
-GPU profiles, custom images, or extra sizes — any KubeSpawner trait
-(`cpu_limit`, `mem_limit`, `node_selector`, `image`,
-`extra_resource_limits`, …) is accepted in `kubespawner_override`.
-
-Set `jupyterhub.custom.profiles: []` to disable the profile selector and
-fall back to single-instance mode.
-
-:::warning[Bump all three image tags together]
-
-z2jh's `values.yaml` cannot reference other values, so the JupyterLab
-image tag appears in three places per profile: the outer
-`kubespawner_override.image`, the inner
-`profile_options.image.choices.default.kubespawner_override.image`, and
-its `display_name`. The repo ships
-[`scripts/bump_image_tags.py`](https://github.com/nebari-dev/nebari-data-science-pack/blob/main/scripts/bump_image_tags.py)
-which syncs all three. When overriding profiles in your own values
-file, mirror the same triple.
-
-:::
-
-### Shared storage
-
-Per-group `/shared/<group>` directories in every user pod, backed by a
-`ReadWriteMany` PVC. On NIC-managed clusters the RWX class is
-[Longhorn](https://longhorn.io/):
-
-```yaml
-sharedStorage:
-  enabled: true
-  storageClass: longhorn
-  size: 100Gi
-```
-
-For clusters where NIC has not wired up an RWX class (local dev, current
-GCP / Azure paths), the chart ships a transitional in-cluster NFS server
-mode:
-
-```yaml
-sharedStorage:
-  enabled: true
-  nfsServer:
-    enabled: true
-    storageClass: ""   # default RWO StorageClass
-    installClient: true  # add nfs-common DaemonSet for k3s / minimal nodes
-```
-
-The NFS server depends on the `quay.io/nebari/volume-nfs:0.8-repack`
-workaround image and is tracked for removal in
-[issue #29](https://github.com/nebari-dev/nebari-data-science-pack/issues/29).
-Prefer a native RWX class wherever possible.
-
-:::warning[`shared-storage-enabled` must match]
-
-`sharedStorage.enabled` and `jupyterhub.custom.shared-storage-enabled`
-must match exactly — `helm template` fails the install if they
-diverge. Same applies to `sharedStorage.groups` /
-`jupyterhub.custom.shared-storage-groups` and
-`sharedStorage.mountPathPrefix` /
-`jupyterhub.custom.shared-storage-mount-prefix`.
-
-:::
-
-### Keycloak OAuth (production)
-
-The default `dummy` authenticator is for local dev. For production,
-switch JupyterHub to `GenericOAuthenticator` against Keycloak — when the
-nebari-operator provisions the OIDC client (`provisionClient: true`), the
-client-id, client-secret, and issuer-url are mounted into the hub pod at
-`/etc/oauth/` and as `JUPYTERHUB_OIDC_CLIENT_SECRET` env var. The
-`config/jupyterhub/00-gateway-auth.py` hub config file picks them up
-automatically.
-
-For manual Keycloak wiring (BYO-Keycloak deployments), see the commented
-example block at the bottom of
-[`values.yaml`](https://github.com/nebari-dev/nebari-data-science-pack/blob/main/values.yaml)
-under `jupyterhub.hub.config`.
-
-### Keycloak RBAC bootstrap
-
-The chart includes a one-shot post-install Job
-(`rbac.bootstrap.enabled: true`, on by default) that:
-
-1. Adds the `oidc-group-membership-mapper` to the `groups` client scope —
-   fixes the missing-mapper bug that surfaces as an empty `groups` claim
-   on tokens.
-2. Creates the `allow-group-directory-creation-role` client role on the
-   hub OIDC client (so the spawner can role-gate shared-mount creation).
-3. Grants `realm-management.{view-clients,view-groups,view-realm}` to the
-   hub client's service account.
-4. Assigns the shared-mount role to the KC groups in
-   `rbac.bootstrap.sharedMountGroups`.
-
-The Job reads the Keycloak admin password from a Secret (defaults to
-`keycloak-admin-credentials` in the `keycloak` namespace — the
-[bitnami/keycloakx](https://github.com/bitnami/charts/tree/main/bitnami/keycloak)
-chart's layout). Set `rbac.bootstrap.enabled: false` on non-Nebari
-clusters or when bringing your own Keycloak.
-
-### Nebi integration
-
-When the [nebi-pack](https://github.com/nebari-dev/nebari-nebi-pack) is
-also deployed, set `nebi.remoteURL` and the JupyterLab pods auto-connect
-to the Nebi team server using the user's Keycloak `IdToken` cookie:
-
-```yaml
-nebi:
-  image:
-    repository: quay.io/nebari/nebi
-    tag: sha-a2c937a
-  remoteURL: https://nebi.your-cluster.example.com
-  internalURL: http://nebi-pack-nebari-nebi-pack.nebi.svc.cluster.local
-  namespace: nebi
-  port: 8460
-```
-
-An init container copies the `nebi` binary from `nebi.image` into each
-JupyterLab pod at spawn time, so the version is controlled at deploy
-time rather than baked into the JupyterLab image. Leaving `remoteURL`
-empty disables the Nebi auto-connect path entirely.
+For the exhaustive list of every chart value with its type and
+default, see [Reference → `values.yaml` reference](../references/values).
 
 ## Verifying the deployment
 
@@ -348,84 +225,18 @@ all `True`.
 
 ## Operator troubleshooting
 
-### Hub falls back to `dummy` auth despite `nebariapp.auth.enabled`
-
-z2jh treats `hub.extraVolumes` and `hub.extraVolumeMounts` as **lists
-that replace (not merge) on override**. If your deployment-specific
-values file sets either, you must re-include the `custom-config` and
-`oauth-client` entries from the chart's default
-[`values.yaml`](https://github.com/nebari-dev/nebari-data-science-pack/blob/main/values.yaml)
-or the hub's `jupyterhub_config.d` ends up empty and `/etc/oauth/` is
-never mounted.
-
-### NebariApp stuck with `RoutingReady: False`
-
-Most common cause: the namespace doesn't carry the
-`nebari.dev/managed: "true"` label.
-
-```bash
-kubectl get namespace data-science --show-labels | grep nebari.dev/managed
-```
-
-If missing, add it (operators usually do this via the ArgoCD
-`managedNamespaceMetadata` block, but for an existing namespace):
-
-```bash
-kubectl label namespace data-science nebari.dev/managed=true
-```
-
-### Keycloak RBAC Job fails with `kcadm.sh: login failed`
-
-The Job reads the admin password from `rbac.bootstrap.kcAdminCredentialSecret`
-in `rbac.bootstrap.namespace` (defaults: `keycloak-admin-credentials` in
-the `keycloak` namespace, matching bitnami/keycloakx). For non-bitnami
-layouts, override these to point at the right Secret + key.
-
-To opt out entirely on local-dev / BYO-Keycloak clusters:
-
-```yaml
-rbac:
-  bootstrap:
-    enabled: false
-```
-
-### `400 OAuth state mismatch` after Keycloak login
-
-JupyterHub fell into the OAuth callback without first hitting
-`/hub/oauth_login`, so the `oauthenticator-state` cookie was never set.
-Cause: the Keycloak client's `rootUrl` / `baseUrl` / `initiate.login.uri`
-aren't set, so KC-initiated SSO flows (account console, third-party
-launchers) redirect straight to `/hub/oauth_callback`.
-
-The bootstrap Job patches these from `rbac.bootstrap.hubExternalUrl`
-(or, if empty, derives from `https://{nebariapp.hostname}`). Re-run the
-Job after correcting that value, or set `rbac.bootstrap.hubExternalUrl`
-to your hub's external origin explicitly.
-
-### `/shared/<group>` empty inside user pods
-
-Check the `shared-storage-enabled` consistency invariant first:
-
-```bash
-helm template . -n data-science > /tmp/render.yaml
-grep -E '^( |-) (shared-storage-enabled|sharedStorage:|enabled:)' /tmp/render.yaml
-```
-
-If both flags are `true` but the directories are empty, the spawner
-falls back to mounting every group from the user's token. Confirm the
-shared-mount role is assigned to the user's KC group (see
-[Keycloak RBAC bootstrap](#keycloak-rbac-bootstrap) above) and that
-`hub.extraEnv.KC_REALM_API_URL` is set in your deployer values — when
-empty, RBAC is off and the spawner mounts everything.
+Recovery steps for the failures operators hit most often — auth falling
+back to `dummy`, NebariApp stuck on `RoutingReady`, Keycloak bootstrap
+auth errors, `shared-storage-enabled` validation, `400 OAuth state
+mismatch` — live on the [Troubleshoot](./troubleshoot) page.
 
 ## Next steps
 
-- **End users** → [Use the pack from a notebook](../how-tos/use) — start
+- **End users** → [Use the pack from a notebook](../how-tos/use_pack_from_notebook) — start
   a server, pick a profile, deploy apps with jhub-apps.
 - **Full chart reference** → [`values.yaml` reference](../references/values) —
-  every option with type, default, and description, sourced from
-  [`values.yaml`](https://github.com/nebari-dev/nebari-data-science-pack/blob/main/values.yaml).
-- **How it fits together** → [Architecture](../references/architecture) —
+  every option with type, default, and description.
+- **How it fits together** → [Architecture](./architecture) —
   the Kubernetes resources the chart creates and how they interact.
 - **Upstream docs** →
   [Zero to JupyterHub](https://z2jh.jupyter.org/),

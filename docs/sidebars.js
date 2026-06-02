@@ -6,17 +6,21 @@ const sidebars = {
     'introduction',
     {
       type: 'category',
-      label: 'Get started',
+      label: 'Deployment',
       link: { type: 'doc', id: 'get-started/index' },
-      items: ['get-started/deploy'],
+      items: [
+        'get-started/deploy',
+        'get-started/architecture',
+        'get-started/configuration_guide',
+        'get-started/troubleshoot',
+      ],
     },
     {
       type: 'category',
-      label: 'How-to guides',
+      label: 'User Guides',
       link: { type: 'doc', id: 'how-tos/index' },
       items: [
-        'how-tos/use',
-        'how-tos/troubleshoot',
+        'how-tos/use_pack_from_notebook',
       ],
     },
     {
@@ -25,7 +29,8 @@ const sidebars = {
       link: { type: 'doc', id: 'references/index' },
       items: [
         'references/values',
-        'references/architecture',
+        'references/release_notes',
+        'references/personas',
       ],
     },
   ],

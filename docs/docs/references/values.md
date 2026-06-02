@@ -10,6 +10,16 @@ This page documents every option exposed by the chart. Source of truth
 is [`values.yaml`](https://github.com/nebari-dev/nebari-data-science-pack/blob/main/values.yaml)
 in the repo — the tables below mirror that file, grouped for readability.
 
+:::note[Defaults reflect chart v0.1.0-alpha.13]
+
+Image tags, subchart versions, and other defaults below are accurate
+for the chart version in
+[`Chart.yaml`](https://github.com/nebari-dev/nebari-data-science-pack/blob/main/Chart.yaml)
+at the time of writing. For the exact pinned values on `main`, always
+check [`values.yaml`](https://github.com/nebari-dev/nebari-data-science-pack/blob/main/values.yaml).
+
+:::
+
 For example install invocations and an ArgoCD `Application` manifest,
 see [Get started → Deploy the pack](../get-started/deploy).
 
@@ -25,7 +35,7 @@ block (`nebariapp.enabled: false`) on a standalone cluster.
 | `nebariapp.hostname` | string | — | Hostname for the hub. **Required when `nebariapp.enabled: true`.** |
 | `nebariapp.service.name` | string | `proxy-public` | Service the NebariApp targets — the JupyterHub proxy. |
 | `nebariapp.service.port` | int | `80` | Service port. |
-| `nebariapp.routing.routes` | list | — | Explicit route rules. Leave unset to route everything at the hostname to the proxy. |
+| `nebariapp.routing.routes` | list | — | Explicit route rules (e.g. `[{pathPrefix: /}]`). Some nebari-operator builds need this set explicitly; if `RoutingReady: True` but the hostname returns 404, add a catch-all rule here. See [Configuration guide → Explicit routing rules](../get-started/configuration_guide#explicit-routing-rules). |
 | `nebariapp.auth.enabled` | bool | `true` | Require Keycloak OIDC for external access. |
 | `nebariapp.auth.provider` | enum | `keycloak` | OIDC provider name. |
 | `nebariapp.auth.provisionClient` | bool | `true` | Have the nebari-operator create the Keycloak client automatically. |
@@ -77,7 +87,7 @@ Per-group `/shared/<group>` directories in every user pod. Requires a
 | `sharedStorage.nfsServer.enabled` | bool | `false` | Run a transitional in-cluster NFS server pod (`quay.io/nebari/volume-nfs`) that re-exports a RWO PVC as RWX. For clusters without a native RWX class. Tracked for removal in [#29](https://github.com/nebari-dev/nebari-data-science-pack/issues/29). |
 | `sharedStorage.nfsServer.storageClass` | string | `""` | StorageClass for the NFS backend RWO PVC. |
 | `sharedStorage.nfsServer.image.repository` | string | `quay.io/nebari/volume-nfs` | NFS server image. |
-| `sharedStorage.nfsServer.image.tag` | string | `0.8-repack` | NFS server image tag (manifest-schema repack — see comment in `values.yaml`). |
+| `sharedStorage.nfsServer.image.tag` | string | _(pinned in `values.yaml`)_ | NFS server image tag (manifest-schema repack — see comment in `values.yaml`). |
 | `sharedStorage.nfsServer.installClient` | bool | `false` | Deploy a DaemonSet that installs `nfs-common` on every node. Required on k3s / minimal OS nodes that ship without NFS client tools. |
 | `sharedStorage.nfsServer.nodeSelector` | map | `{}` | Pin the NFS server pod to specific nodes (avoids slow RWO PVC reattachment on reschedule). |
 | `sharedStorage.nfsServer.nodeAffinity` | map | `{}` | Full nodeAffinity spec (overrides `nodeSelector` if both set). |
@@ -92,7 +102,7 @@ token.
 | Value | Type | Default | Description |
 |---|---|---|---|
 | `nebi.image.repository` | string | `quay.io/nebari/nebi` | Nebi binary image (init container source). |
-| `nebi.image.tag` | string | `""` | **Required when `nebi.remoteURL` is set** (e.g. `sha-a2c937a`). |
+| `nebi.image.tag` | string | `""` | **Required when `nebi.remoteURL` is set** — pin to a tested `sha-*` build from the [Nebi container registry](https://quay.io/repository/nebari/nebi?tab=tags). |
 | `nebi.image.pullPolicy` | string | `IfNotPresent` | Pull policy for the Nebi init container. |
 | `nebi.remoteURL` | string | `""` | URL of the remote Nebi server (e.g. `https://nebi.your-cluster.example.com`). Empty = Nebi integration disabled. |
 | `nebi.internalURL` | string | `""` | Cluster-internal URL for hub → Nebi token exchange (e.g. `http://nebi-pack-nebari-nebi-pack.nebi.svc.cluster.local`). |
@@ -181,7 +191,7 @@ keeps them in sync.
 | Value | Type | Default | Description |
 |---|---|---|---|
 | `jupyterhub.hub.image.name` | string | `quay.io/nebari/nebari-data-science-pack-jupyterhub` | Hub image. Custom Nebari image with jhub-apps + KeyCloakOAuthenticator pre-installed. |
-| `jupyterhub.hub.image.tag` | string | `sha-7788c40` | Hub image tag. Bump via `scripts/bump_image_tags.py`. |
+| `jupyterhub.hub.image.tag` | string | _(pinned in `values.yaml`)_ | Hub image tag. Bump via `scripts/bump_image_tags.py`. |
 | `jupyterhub.hub.config.JupyterHub.admin_access` | bool | `true` | Allow admins to access user servers. |
 | `jupyterhub.hub.config.JupyterHub.authenticator_class` | string | `dummy` | Authenticator. `dummy` for local dev (any user/pass); `generic-oauth` for production Keycloak. |
 | `jupyterhub.hub.extraVolumes` | list | _(custom-config + oauth-client)_ | **Replace-not-merge**: deployer overrides must re-include both entries or hub config and `/etc/oauth` disappear. |
@@ -196,7 +206,7 @@ keeps them in sync.
 | Value | Type | Default | Description |
 |---|---|---|---|
 | `jupyterhub.singleuser.image.name` | string | `quay.io/nebari/nebari-data-science-pack-jupyterlab` | JupyterLab image. |
-| `jupyterhub.singleuser.image.tag` | string | `sha-7788c40` | JupyterLab image tag. Must match the profile entries. |
+| `jupyterhub.singleuser.image.tag` | string | _(pinned in `values.yaml`)_ | JupyterLab image tag. Must match the profile entries. |
 | `jupyterhub.singleuser.defaultUrl` | string | `/lab` | Land users in JupyterLab (not classic notebook). |
 | `jupyterhub.singleuser.extraEnv.JUPYTERHUB_SINGLEUSER_APP` | string | `jupyter_server.serverapp.ServerApp` | Required by jhub-apps. |
 | `jupyterhub.singleuser.storage.type` | enum | `none` | **Required**: jhub-apps' `JHubSpawner` expects a list, but the subchart's dynamic storage emits a dict. The pack configures the home PVC in `01-spawner.py` instead. |
@@ -234,4 +244,4 @@ which culls **interactive notebook servers** (not jhub-apps).
 | `name` | string | `nebari-data-science-pack` | Chart name. |
 | `version` | string | _(see `Chart.yaml`)_ | Chart version. |
 | `appVersion` | string | `1.0.0` | Pack app version. |
-| `dependencies[0]` | — | `jupyterhub 4.3.2` | Z2JH subchart dependency. |
+| `dependencies[0]` | — | `jupyterhub` _(version pinned in `Chart.yaml`)_ | Z2JH subchart dependency. |

@@ -1,30 +1,39 @@
 ---
-title: How-to guides
-description: Task-oriented guides for end users of the Nebari Data Science Pack — start a server, pick a profile, deploy apps through jhub-apps, troubleshoot common failures.
+title: User Guides
+description: End-user material for the Nebari Data Science Pack — log in to JupyterLab, pick a profile, work with /shared, deploy apps through jhub-apps.
 sidebar_position: 2
 ---
 
-# How-to guides
+# User Guides
 
-This section is for **end users** on a cluster that already has the pack
-installed. If you're trying to install the pack itself, see
-[Get started](../get-started/) instead.
+If you are a notebook user on a cluster that already runs the Nebari
+Data Science Pack, the pages in this section walk you through what
+you'll do day-to-day: signing in, picking a profile, sharing work
+with your team, and deploying apps from the launcher.
 
-The how-tos assume:
+If you're trying to install the pack itself, you're an operator —
+head to [Deployment → Deploy the pack →](../get-started/deploy)
+instead.
 
-- You have an account on the Nebari cluster (Keycloak SSO in production,
-  or any username/password in local dev).
-- Your operator has confirmed the hub and proxy pods are `Running` and
-  given you the JupyterHub URL (`https://jupyter.<your-cluster>` in
-  production, or `http://localhost:8000` after a `kubectl port-forward`
-  in local dev).
+## Before you start
+
+You'll need:
+
+- An account on the Nebari cluster (Keycloak SSO in production, or
+  any username/password in local dev).
+- The JupyterHub URL your operator gave you — typically
+  `https://jupyter.<your-cluster>` in production, or a local URL
+  like `http://localhost:8000` in dev.
+
+If you're missing either, reach out to whoever runs your cluster.
 
 ## What's in this section
 
-- **[Use the pack from a notebook](./use)** — start a JupyterLab server,
-  pick a profile, work with `/shared/<group>` directories, and deploy
-  apps through the jhub-apps launcher.
-- **[Troubleshoot](./troubleshoot)** — consolidated index of common
-  failure modes (login redirect loops, spawner timeouts, missing shared
-  directories, jhub-apps registration errors), with links to the deeper
-  per-section troubleshooting blocks in the Use and Deploy guides.
+- **[Use the pack from a notebook →](./use_pack_from_notebook)** —
+  learn how to log in, pick a profile, work with `/shared/<group>`
+  directories, deploy apps through the jhub-apps launcher, and
+  recover from common notebook-side issues.
+
+When something breaks that you can't fix from the notebook side, hand
+the error to your operator and link them at
+[Deployment → Troubleshoot →](../get-started/troubleshoot).

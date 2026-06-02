@@ -6,9 +6,18 @@ sidebar_position: 2
 
 # Architecture
 
+:::note[Defaults reflect chart v0.1.0-alpha.13]
+
+Subchart and image versions cited below are pinned in
+[`Chart.yaml`](https://github.com/nebari-dev/nebari-data-science-pack/blob/main/Chart.yaml)
+and [`values.yaml`](https://github.com/nebari-dev/nebari-data-science-pack/blob/main/values.yaml).
+Check the repo for the latest pins.
+
+:::
+
 The pack is a Helm chart that lays down:
 
-- The **JupyterHub** subchart (z2jh 4.3.2) — `hub`, `proxy`,
+- The **JupyterHub** subchart (z2jh) — `hub`, `proxy`,
   `user-scheduler`, NetworkPolicies, RBAC.
 - A custom **Nebari hub image** with `jhub-apps` and
   `KeyCloakOAuthenticator` pre-installed, with hub config files
@@ -92,8 +101,10 @@ flowchart TD
 ### JupyterHub subchart
 
 The chart depends on
-[`jupyterhub` 4.3.2](https://hub.jupyter.org/helm-chart/) (z2jh) and
-threads every value under `jupyterhub.*` through to it. The subchart
+[`jupyterhub`](https://hub.jupyter.org/helm-chart/) (z2jh) — exact
+version pinned in
+[`Chart.yaml`](https://github.com/nebari-dev/nebari-data-science-pack/blob/main/Chart.yaml) —
+and threads every value under `jupyterhub.*` through to it. The subchart
 provides the hub, proxy, user-scheduler, NetworkPolicies, and per-user
 RBAC. The pack overrides only what's needed for jhub-apps, Keycloak,
 profiles, and shared storage.
