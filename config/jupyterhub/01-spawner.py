@@ -193,10 +193,7 @@ def _setup_trust_bundle(spawner):
     spawner.volume_mounts = list(spawner.volume_mounts) + [
         {"name": "ca-merged", "mountPath": "/etc/ssl/certs-extra"},
     ]
-    existing_init = getattr(spawner, "init_containers", None)
-    if not isinstance(existing_init, list):
-        existing_init = []
-    spawner.init_containers = existing_init + [
+    spawner.init_containers = list(spawner.init_containers) + [
         {
             "name": "merge-ca-bundle",
             "image": spawner.image,

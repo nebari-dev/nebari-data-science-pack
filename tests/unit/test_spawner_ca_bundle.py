@@ -90,3 +90,22 @@ def test_setup_trust_bundle_respects_custom_configmap_and_key():
     assert org_ca["configMap"]["name"] == "my-ca"
     init = next(c for c in spawner.init_containers if c["name"] == "merge-ca-bundle")
     assert "cat /org-ca/tls.crt >> /merged/ca-bundle.crt" in init["command"][2]
+
+
+def test_setup_trust_bundle_appends_without_clobbering_existing():
+    mod = _load({"custom.trust-bundle-enabled": True})
+    spawner = FakeSpawner()
+    spawner.volumes = [{"name": "home"}]
+    spawner.volume_mounts = [{"name": "home", "mountPath": "/home/jovyan"}]
+    spawner.init_containers = [{"name": "install-nebi"}]
+    spawner.environment = {"HOME": "/home/jovyan"}
+
+    mod._setup_trust_bundle(spawner)
+
+    assert any(v["name"] == "home" for v in spawner.volumes)
+    assert any(v["name"] == "org-ca" for v in spawner.volumes)
+    assert any(m["name"] == "home" for m in spawner.volume_mounts)
+    assert any(c["name"] == "install-nebi" for c in spawner.init_containers)
+    assert any(c["name"] == "merge-ca-bundle" for c in spawner.init_containers)
+    assert spawner.environment["HOME"] == "/home/jovyan"
+    assert spawner.environment["REQUESTS_CA_BUNDLE"] == MERGED
