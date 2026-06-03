@@ -214,6 +214,17 @@ def _get_profile_groups(auth_state):
     return result
 
 
+def _get_keycloak_profile_names(auth_state):
+    """Profile display_names allowed via ``access: keycloak``.
+
+    Read from the user's ``jupyterlab_profiles`` claim, which a Keycloak
+    attribute mapper stamps into the token from the user's group/user
+    attributes (matches classic Nebari).
+    """
+    oauth_user = (auth_state or {}).get("oauth_user") or {}
+    return oauth_user.get("jupyterlab_profiles", []) or []
+
+
 def _profile_username(auth_state):
     """Username matched against a profile's ``users`` list.
 
@@ -225,15 +236,19 @@ def _profile_username(auth_state):
     return oauth_user.get("preferred_username") or ""
 
 
-def _filter_profiles(profiles, groups, username):
+def _filter_profiles(profiles, groups, username, keycloak_profile_names=()):
     """Return the profiles a user may select, stripped of gating-only keys.
 
     Mirrors classic Nebari's ``access:`` semantics on each profile:
       * ``access: all`` (or omitted) — visible to everyone.
       * ``access: yaml`` — visible only if the user is in the profile's
         ``users`` list or shares one of the profile's ``groups``.
+      * ``access: keycloak`` — visible only if the profile's ``display_name``
+        is in the user's ``jupyterlab_profiles`` claim, which a Keycloak
+        attribute mapper stamps into the token from group/user attributes.
     """
     group_set = set(groups)
+    profile_name_set = set(keycloak_profile_names)
     visible = []
     for profile in profiles:
         access = profile.get("access", "all")
@@ -242,12 +257,16 @@ def _filter_profiles(profiles, groups, username):
             in_groups = bool(group_set & set(profile.get("groups") or []))
             if not in_users and not in_groups:
                 continue
+        elif access == "keycloak":
+            if profile.get("display_name") not in profile_name_set:
+                continue
         elif access != "all":
             # Fail closed on an unrecognized access mode: restricted profiles
             # gate expensive resources, so a typo must hide the profile rather
             # than expose it to everyone.
             log.warning(
-                "profiles: hiding %r — unsupported access mode %r (use 'all' or 'yaml')",
+                "profiles: hiding %r — unsupported access mode %r "
+                "(use 'all', 'yaml', or 'keycloak')",
                 profile.get("slug") or profile.get("display_name"),
                 access,
             )
@@ -268,7 +287,8 @@ async def _render_profile_list(spawner):
     auth_state = await spawner.user.get_auth_state()
     groups = _get_profile_groups(auth_state)
     username = _profile_username(auth_state)
-    visible = _filter_profiles(_profiles, groups, username)
+    keycloak_profile_names = _get_keycloak_profile_names(auth_state)
+    visible = _filter_profiles(_profiles, groups, username, keycloak_profile_names)
     log.info(
         "profiles: user %s (groups=%s) sees %d/%d profile(s): %s",
         username, groups, len(visible), len(_profiles),
