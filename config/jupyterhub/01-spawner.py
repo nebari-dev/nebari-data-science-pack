@@ -161,6 +161,69 @@ if nebi_image:
 
 
 # ---------------------------------------------------------------------------
+# Enterprise CA bundle (TLS-inspected egress)
+# ---------------------------------------------------------------------------
+# On clusters behind a TLS-inspecting proxy, NIC core's trust-manager projects
+# the org CA into every namespace as a ConfigMap. We merge it with the image's
+# system CA bundle into an emptyDir and point the standard CA env vars at the
+# merged file, so pip/conda/git verify BOTH proxy-inspected (org-signed) and
+# genuine public-root endpoints with no flags. Gated off by default.
+_trust_bundle_enabled = get_chart_config("trust-bundle-enabled", False)
+_trust_bundle_configmap = get_chart_config("trust-bundle-configmap", "nebari-trust-bundle")
+_trust_bundle_key = get_chart_config("trust-bundle-key", "ca-certificates.crt")
+_MERGED_CA_PATH = "/etc/ssl/certs-extra/ca-bundle.crt"
+
+
+def _setup_trust_bundle(spawner):
+    """Mount + merge the org CA into the pod and set the CA env vars.
+
+    The merge init container runs spawner.image so it reads the SAME system CA
+    store the main container has (a generic busybox would not). The org-ca
+    ConfigMap is mounted optional, so a cluster without trust-manager — or a
+    spawn that races the projection — still starts; the merged file is then
+    just the system bundle, i.e. no behavior change.
+    """
+    spawner.volumes = list(spawner.volumes) + [
+        {
+            "name": "org-ca",
+            "configMap": {"name": _trust_bundle_configmap, "optional": True},
+        },
+        {"name": "ca-merged", "emptyDir": {}},
+    ]
+    spawner.volume_mounts = list(spawner.volume_mounts) + [
+        {"name": "ca-merged", "mountPath": "/etc/ssl/certs-extra"},
+    ]
+    existing_init = getattr(spawner, "init_containers", None)
+    if not isinstance(existing_init, list):
+        existing_init = []
+    spawner.init_containers = existing_init + [
+        {
+            "name": "merge-ca-bundle",
+            "image": spawner.image,
+            "command": [
+                "/bin/sh",
+                "-c",
+                "cp /etc/ssl/certs/ca-certificates.crt /merged/ca-bundle.crt && "
+                f"if [ -f /org-ca/{_trust_bundle_key} ]; then "
+                f"cat /org-ca/{_trust_bundle_key} >> /merged/ca-bundle.crt; fi",
+            ],
+            "volumeMounts": [
+                {"name": "org-ca", "mountPath": "/org-ca", "readOnly": True},
+                {"name": "ca-merged", "mountPath": "/merged"},
+            ],
+        },
+    ]
+    spawner.environment = {
+        **spawner.environment,
+        "REQUESTS_CA_BUNDLE": _MERGED_CA_PATH,
+        "SSL_CERT_FILE": _MERGED_CA_PATH,
+        "NODE_EXTRA_CA_CERTS": _MERGED_CA_PATH,
+        "CURL_CA_BUNDLE": _MERGED_CA_PATH,
+        "GIT_SSL_CAINFO": _MERGED_CA_PATH,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Environment variables
 # ---------------------------------------------------------------------------
 # Start with extraEnv from values.yaml so deployers can inject env vars
