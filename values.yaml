@@ -240,6 +240,18 @@ nebi:
   # Port the Nebi server listens on (used in hub -> nebi NetworkPolicy
   # egress rule).
   port: 8460
+  # Persistent storage for Nebi workspaces.
+  # Mounts a shared RWX PVC at /var/lib/nebi/workspaces so workspace files
+  # persist across pod restarts. Requires a ReadWriteMany-capable StorageClass
+  # on the cluster. The home PVC is RWO and per-user, so a separate shared
+  # PVC is needed for multi-user access.
+  workspacesStorage:
+    # StorageClass for the workspaces PVC. Leave empty for cluster default
+    # (must support ReadWriteMany or set accessModes accordingly).
+    storageClass: ""
+    size: 15Gi
+    accessModes:
+      - ReadWriteMany
 
 # Helm Job that one-shots Keycloak realm config for role-gated shared
 # mounts. Runs as a post-install / post-upgrade

@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 # causing a path mismatch when usernames contain special characters (e.g. emails).
 # Each user still gets an isolated PVC via claim-{username}.
 c.KubeSpawner.storage_pvc_ensure = True
-c.KubeSpawner.storage_capacity = get_config("custom.storage-capacity", "20Gi")
+c.KubeSpawner.storage_capacity = get_config("custom.storage-capacity", "5Gi")
 c.KubeSpawner.storage_access_modes = ["ReadWriteOnce"]
 # Without this override, KubeSpawner's default template is
 # `claim-{username}--{servername}`, so for jhub-apps named servers it ensures
@@ -161,6 +161,24 @@ if nebi_image:
 
 
 # ---------------------------------------------------------------------------
+# Nebi workspaces storage (shared RWX PVC)
+# ---------------------------------------------------------------------------
+# Mount a shared RWX PVC at /var/lib/nebi/workspaces so workspace files
+# persist across pod restarts. The nebi server organizes files by owner
+# internally, so a shared PVC is safe — each user's data lives in its own
+# subdirectory tree. A separate PVC is needed because the home PVC is RWO
+# and per-user, while workspaces benefit from shared access.
+c.KubeSpawner.volumes.append({
+    "name": "nebi-workspaces",
+    "persistentVolumeClaim": {"claimName": "nebi-workspaces"},
+})
+c.KubeSpawner.volume_mounts.append({
+    "name": "nebi-workspaces",
+    "mountPath": "/var/lib/nebi/workspaces",
+})
+
+
+# ---------------------------------------------------------------------------
 # Environment variables
 # ---------------------------------------------------------------------------
 # Start with extraEnv from values.yaml so deployers can inject env vars
@@ -171,6 +189,8 @@ env["HOME"] = "/home/jovyan"
 nebi_remote_url = get_chart_config("nebi-remote-url")
 if nebi_remote_url:
     env["NEBI_REMOTE_URL"] = nebi_remote_url
+
+env["NEBI_STORAGE_WORKSPACES_DIR"] = "/var/lib/nebi/workspaces"
 
 c.KubeSpawner.environment = env
 
