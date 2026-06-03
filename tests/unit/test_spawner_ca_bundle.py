@@ -8,6 +8,7 @@ merged file. These assertions pin that contract.
 
 from __future__ import annotations
 
+import asyncio
 import sys
 import types
 
@@ -121,8 +122,6 @@ def test_trust_bundle_enabled_flag_reflects_config():
 
 def test_pre_spawn_hook_skips_trust_bundle_when_disabled():
     """Orchestrator must not touch CA volumes/env when the toggle is off."""
-    import asyncio
-
     mod = _load({})  # disabled
 
     class _User:
@@ -142,8 +141,7 @@ def test_pre_spawn_hook_skips_trust_bundle_when_disabled():
 
 
 def test_pre_spawn_hook_applies_trust_bundle_when_enabled():
-    import asyncio
-
+    """Orchestrator wires the CA merge (volume + env) when the toggle is on."""
     mod = _load({"custom.trust-bundle-enabled": True})
 
     class _User:

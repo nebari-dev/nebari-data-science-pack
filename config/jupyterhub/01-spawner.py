@@ -888,7 +888,9 @@ async def _pre_spawn_hook(spawner):
         log.debug("pre-spawn: Nebi auto-auth not configured, skipping")
 
     # 1b. Enterprise CA bundle (non-fatal). Off by default; on only when the
-    #     cluster runs trust-manager and the deployer/operator enables it.
+    #     cluster runs trust-manager and the deployer/operator enables it. The
+    #     non-fatal guard lives here at the call site (unlike Nebi, which guards
+    #     inside _nebi_pre_spawn_hook) since _setup_trust_bundle is synchronous.
     if _trust_bundle_enabled:
         try:
             _setup_trust_bundle(spawner)
