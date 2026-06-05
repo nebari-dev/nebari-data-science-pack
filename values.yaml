@@ -53,10 +53,13 @@ nebariapp:
     # JupyterHub proxy service (created by jupyterhub subchart)
     name: proxy-public
     port: 80
-  # routing:
-  #   routes:
-  #     - pathPrefix: /
-  #       pathType: Exact
+  # Gateway routing. Defaults to sending all paths to the JupyterHub proxy so
+  # the operator creates the HTTPRoute (and, with it, the TLS listener/cert)
+  # out of the box. Without this the NebariApp reports RoutingNotConfigured and
+  # the hub is never exposed.
+  routing:
+    routes:
+      - pathPrefix: /
   auth:
     enabled: true
     provider: keycloak
