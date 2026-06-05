@@ -21,9 +21,12 @@
 # =============================================================================
 # IMAGE REFERENCE MAP
 # =============================================================================
-# Lab pod: each profile's kubespawner_override.image. (If profiles is empty,
-#   singleuser.image is used instead.) This one field feeds both the native
-#   spawn form and the jhub-apps image box.
+# Lab pod: set by the `kubespawner_override.image` of each entry under
+#   `jupyterhub.custom.profiles` (this chart ships Small + Medium entries, so
+#   that is the image users get). This one field feeds both the native spawn
+#   form and the jhub-apps image box. The `jupyterhub.singleuser.image` below
+#   is used ONLY if a deployer sets `jupyterhub.custom.profiles: []` (no
+#   profiles, i.e. the profile picker is turned off).
 # Hub pod: jupyterhub.hub.image.
 # nebi binary (copied into lab pods by an init container, NOT the lab image):
 #   custom.nebi-image, else nebi.image.repository:nebi.image.tag.
@@ -563,8 +566,10 @@ jupyterhub:
             - port: 10202  # jhub-apps service port
 
   singleuser:
-    # Fallback lab image: only launches a pod when profiles == []. Otherwise
-    # each profile's image overrides it (see IMAGE REFERENCE MAP at top).
+    # Fallback lab image, used ONLY when `jupyterhub.custom.profiles` is set to
+    # an empty list ([]). With the profiles this chart ships (Small + Medium),
+    # each profile's own `kubespawner_override.image` is used and this value is
+    # never what launches a pod. See IMAGE REFERENCE MAP at top.
     image:
       name: quay.io/nebari/nebari-data-science-pack-jupyterlab
       tag: "sha-46289ab"
