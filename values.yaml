@@ -241,17 +241,16 @@ nebi:
   # egress rule).
   port: 8460
   # Persistent storage for Nebi workspaces.
-  # Mounts a shared RWX PVC at /var/lib/nebi/workspaces so workspace files
-  # persist across pod restarts. Requires a ReadWriteMany-capable StorageClass
-  # on the cluster. The home PVC is RWO and per-user, so a separate shared
-  # PVC is needed for multi-user access.
+  # Each user gets their own RWO PVC created dynamically by KubeSpawner.
+  # The values below are fed into the hub config as defaults for
+  # workspace-storage-class and workspace-storage-capacity.
   workspacesStorage:
-    # StorageClass for the workspaces PVC. Leave empty for cluster default
-    # (must support ReadWriteMany or set accessModes accordingly).
+    # StorageClass for the per-user workspace PVCs. Leave empty for cluster
+    # default (must support ReadWriteOnce).
     storageClass: ""
-    # Shared across all users — size generously to accommodate pixi
-    # environments (2–5 Gi each) for many concurrent users.
-    size: 100Gi
+    # Per-user capacity.
+    size: 5Gi
+    # DEPRECATED: no longer used. Each workspace PVC is hard-coded to RWO.
     accessModes:
       - ReadWriteMany
 
@@ -429,6 +428,12 @@ jupyterhub:
     # specific value independent of the PVC/StorageClass setup.
     shared-storage-groups: []       # allowlist; empty = all groups from token
     shared-storage-mount-prefix: "/shared"
+    # Workspace storage — per-user RWO PVC for nebi workspaces.
+    # KubeSpawner creates these dynamically in the pre_spawn_hook.
+    # Leave empty to use the cluster default StorageClass.
+    workspace-storage-class: ""
+    # Pixi environments run 2–5 Gi each, so size accordingly.
+    workspace-storage-capacity: "20Gi"
     # Role-gated shared-mount RBAC configuration
     # is delivered via the hub Deployment's env vars (KC_REALM_API_URL
     # + KC_SHARED_MOUNT_ROLE), NOT via this `custom` block. Reasons:
