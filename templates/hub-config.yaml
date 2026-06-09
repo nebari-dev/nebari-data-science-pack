@@ -49,10 +49,6 @@ data:
         # both. Deployer override via jupyterhub.custom.shared-storage-enabled
         # still wins via z2jh.
         "shared-storage-enabled": {{ ternary "True" "False" .Values.sharedStorage.enabled }},
-        # Mirrors .Values.nebi.workspacesStorage so existing deployer configs
-        # keep driving workspace PVC class and size.
-        "workspace-storage-class": {{ .Values.nebi.workspacesStorage.storageClass | quote }},
-        "workspace-storage-capacity": {{ .Values.nebi.workspacesStorage.size | quote }},
     }
 
 
