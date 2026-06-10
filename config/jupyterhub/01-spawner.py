@@ -934,7 +934,7 @@ async def _ensure_workspace_pvc(spawner):
         storage=storage_capacity,
         labels={
             "app": "nebi-workspaces",
-            "hub.jupyter.org/username": username,
+            "hub.jupyter.org/username": slug,
         },
     )
 
