@@ -65,7 +65,7 @@ yarn build
 
 ## Deployment
 
-The site deploys automatically via [Netlify](https://www.netlify.com/) whenever changes land on the `main` branch. Configuration lives in [`netlify.toml`](../netlify.toml) at the repository root:
+The site deploys automatically via GitHub Pages whenever changes land on the `main` branch. The GitHub Actions workflow builds the site from the `docs/` directory and publishes it to the `gh-pages` branch.
 
 | Setting | Value |
 |---------|-------|
@@ -75,6 +75,6 @@ The site deploys automatically via [Netlify](https://www.netlify.com/) whenever 
 | Node version | `20` |
 | Yarn version | `1.22.22` |
 
-Pull requests get an automatic Netlify deploy preview, so reviewers can browse the rendered site before merging. No manual deploy step is required; if you need to trigger a rebuild without a code change, do it from the Netlify dashboard.
+Pull requests can be previewed locally by running `yarn build && yarn serve` inside the `docs/` directory. No manual deploy step is required; merges to `main` trigger the GitHub Actions workflow automatically.
 
-To point the site at a custom domain, update `url` in [`docusaurus.config.js`](./docusaurus.config.js) and configure the domain in Netlify. The current default, `https://nebari-data-science-pack.netlify.app`, matches the Netlify-generated subdomain.
+To point the site at a custom domain, update `url` in [`docusaurus.config.js`](./docusaurus.config.js) and configure the domain in the repository's GitHub Pages settings.
