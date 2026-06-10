@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 
 from kubernetes_asyncio.client.rest import ApiException
 from kubespawner.objects import make_pvc
+from kubespawner.slugs import safe_slug
 from z2jh import get_config
 
 log = logging.getLogger(__name__)
@@ -158,10 +159,6 @@ if nebi_image:
         "volumeMounts": [{
             "name": "nebi-bin",
             "mountPath": "/nebi-bin",
-        },
-        {
-            "name": "nebi-workspaces",
-            "mountPath": "/nebi-workspaces",
         }],
     })
 
@@ -920,7 +917,7 @@ async def _ensure_workspace_pvc(spawner):
     retry logic KubeSpawner uses internally.
     """
     username = spawner.user.name
-    pvc_name = f"nebi-workspaces-{username}"
+    pvc_name = safe_slug(f"nebi-workspaces-{username}", max_length=63)
     namespace = spawner.namespace
 
     storage_class = get_config("custom.workspace-storage-class", "") or None
@@ -1003,22 +1000,22 @@ async def _pre_spawn_hook(spawner):
     log.debug("pre-spawn: ensuring workspace PVC for %s", username)
     try:
         workspace_pvc_name = await _ensure_workspace_pvc(spawner)
-        spawner.volumes = list(spawner.volumes) + [
-            {
-                "name": "nebi-workspaces",
-                "persistentVolumeClaim": {"claimName": workspace_pvc_name},
-            }
-        ]
-        spawner.volume_mounts = list(spawner.volume_mounts) + [
-            {
-                "name": "nebi-workspaces",
-                "mountPath": "/var/lib/nebi/workspaces",
-                "subPath": "workspaces/{username}",
-            }
-        ]
+        workspaces_volume = {
+            "name": "nebi-workspaces",
+            "persistentVolumeClaim": {"claimName": workspace_pvc_name},
+        }
+        workspaces_volume_mount = {
+            "name": "nebi-workspaces",
+            "mountPath": "/var/lib/nebi/workspaces",
+        }
         log.info("pre-spawn: workspace PVC %s configured for %s", workspace_pvc_name, username)
     except Exception:
         log.exception("pre-spawn: workspace PVC setup FAILED for %s", username)
+        workspaces_volume = workspaces_volume_mount = None
+    if workspaces_volume is not None:
+        spawner.volumes.append(workspaces_volume)
+    if workspaces_volume_mount is not None:
+        spawner.volume_mounts.append(workspaces_volume_mount)
 
     # 3. Resolve groups from auth_state (stored by KeyCloakOAuthenticator)
     groups = _get_user_groups(auth_state)
