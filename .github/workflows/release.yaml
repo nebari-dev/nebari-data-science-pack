@@ -73,6 +73,10 @@ jobs:
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
           git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+          # The published docs site lives under docs/ on gh-pages. This branch is
+          # force-pushed fresh each release, so carry docs/ over to avoid wiping it.
+          git fetch origin gh-pages --depth=1 || true
+          git checkout FETCH_HEAD -- docs 2>/dev/null || true
           helm repo index . --url https://github.com/${{ github.repository }}/releases/download/${{ steps.chart.outputs.name }}-${{ steps.chart.outputs.version }}
           git add .
           git commit -m "Release ${{ steps.chart.outputs.name }}-${{ steps.chart.outputs.version }}"

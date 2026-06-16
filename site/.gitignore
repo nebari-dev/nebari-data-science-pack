@@ -1,0 +1,8 @@
+# Hugo build output and caches (the docs site is built and deployed in CI / locally)
+public/
+resources/
+.hugo_build.lock
+
+# Generated retrieval index for Ask Assistant (built from rendered HTML)
+static/assistant-index.json
+assistant-index.json
