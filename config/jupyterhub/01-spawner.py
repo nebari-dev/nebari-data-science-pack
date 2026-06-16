@@ -11,6 +11,10 @@ from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+import escapism
+import string
+from kubernetes_asyncio.client.rest import ApiException
+from kubespawner.objects import make_pvc
 from z2jh import get_config
 
 log = logging.getLogger(__name__)
@@ -29,7 +33,7 @@ log = logging.getLogger(__name__)
 # causing a path mismatch when usernames contain special characters (e.g. emails).
 # Each user still gets an isolated PVC via claim-{username}.
 c.KubeSpawner.storage_pvc_ensure = True
-c.KubeSpawner.storage_capacity = get_config("custom.storage-capacity", "20Gi")
+c.KubeSpawner.storage_capacity = get_config("custom.storage-capacity", "5Gi")
 c.KubeSpawner.storage_access_modes = ["ReadWriteOnce"]
 # Without this override, KubeSpawner's default template is
 # `claim-{username}--{servername}`, so for jhub-apps named servers it ensures
@@ -171,6 +175,8 @@ env["HOME"] = "/home/jovyan"
 nebi_remote_url = get_chart_config("nebi-remote-url")
 if nebi_remote_url:
     env["NEBI_REMOTE_URL"] = nebi_remote_url
+
+env["NEBI_STORAGE_WORKSPACES_DIR"] = "/var/lib/nebi/workspaces"
 
 c.KubeSpawner.environment = env
 
@@ -901,11 +907,65 @@ async def _setup_nss_wrapper(spawner, username, groups):
 
 
 # ---------------------------------------------------------------------------
+# Workspace PVC helper
+# ---------------------------------------------------------------------------
+
+async def _ensure_workspace_pvc(spawner):
+    """Create a per-user RWO PVC for nebi workspaces if it doesn't exist.
+
+    KubeSpawner only manages one PVC natively (the home directory).  We
+    create the second PVC here via the Kubernetes API, mirroring the same
+    retry logic KubeSpawner uses internally.
+    """
+    username = spawner.user.name
+    safe_chars = set(string.ascii_lowercase + string.digits)
+    slug = escapism.escape(username, safe=safe_chars, escape_char='-').lower()
+    pvc_name = f"nebi-workspaces-{slug}"
+    namespace = spawner.namespace
+
+    storage_class = get_config("custom.workspace-storage-class", "") or None
+    storage_capacity = get_config("custom.workspace-storage-capacity", "20Gi")
+
+    pvc = make_pvc(
+        name=pvc_name,
+        storage_class=storage_class,
+        access_modes=["ReadWriteOnce"],
+        selector=None,
+        storage=storage_capacity,
+        labels={
+            "app": "nebi-workspaces",
+            "hub.jupyter.org/username": slug,
+        },
+    )
+
+    try:
+        await spawner.api.create_namespaced_persistent_volume_claim(
+            namespace=namespace,
+            body=pvc,
+        )
+        log.info("Created workspace PVC %s in namespace %s", pvc_name, namespace)
+    except ApiException as exc:
+        if exc.status == 409:
+            log.info("Workspace PVC %s already  exists", pvc_name)
+        else:
+            log.error("Failed to create workspace PVC %s: %s", pvc_name, exc)
+            raise
+
+    return pvc_name
+
+
+# ---------------------------------------------------------------------------
 # Pre-spawn hook orchestrator
 # ---------------------------------------------------------------------------
-# Chains the three independent concerns: Nebi auto-auth, shared storage mounts,
-# and NSS wrapper setup. Each is implemented as its own focused function above.
-# The orchestrator always runs so NSS wrapper is active even without Nebi/shared.
+# Chains the independent concerns: 
+# 1. Nebi auto-auth
+# 2. workspace PVC
+# 3. Resolve groups
+# 5. shared storage mounts
+# 4. NSS wrapper setup
+# 
+# Each is implemented as its own focused function above. The orchestrator always
+# runs so NSS wrapper is active even without Nebi/shared.
 
 _nebi_auth_configured = bool(nebi_remote_url and get_chart_config("nebi-internal-url"))
 log.info(
@@ -939,11 +999,32 @@ async def _pre_spawn_hook(spawner):
     else:
         log.debug("pre-spawn: Nebi auto-auth not configured, skipping")
 
-    # 2. Resolve groups from auth_state (stored by KeyCloakOAuthenticator)
+    # 2. Workspace PVC — per-user RWO (non-fatal)
+    log.debug("pre-spawn: ensuring workspace PVC for %s", username)
+    try:
+        workspace_pvc_name = await _ensure_workspace_pvc(spawner)
+        workspaces_volume = {
+            "name": "nebi-workspaces",
+            "persistentVolumeClaim": {"claimName": workspace_pvc_name},
+        }
+        workspaces_volume_mount = {
+            "name": "nebi-workspaces",
+            "mountPath": "/var/lib/nebi/workspaces",
+        }
+        log.info("pre-spawn: workspace PVC %s configured for %s", workspace_pvc_name, username)
+    except Exception:
+        log.exception("pre-spawn: workspace PVC setup FAILED for %s", username)
+        workspaces_volume = workspaces_volume_mount = None
+    if workspaces_volume is not None:
+        spawner.volumes.append(workspaces_volume)
+    if workspaces_volume_mount is not None:
+        spawner.volume_mounts.append(workspaces_volume_mount)
+
+    # 3. Resolve groups from auth_state (stored by KeyCloakOAuthenticator)
     groups = _get_user_groups(auth_state)
     log.info("pre-spawn: user %s resolved groups: %s", username, groups)
 
-    # 3. Shared group directory PVC mounts (only when RWX PVC is configured)
+    # 4. Shared group directory PVC mounts (only when RWX PVC is configured)
     if shared_storage_enabled:
         if groups:
             log.info("pre-spawn: setting up shared storage mounts for %s", username)
@@ -963,7 +1044,7 @@ async def _pre_spawn_hook(spawner):
     else:
         log.debug("pre-spawn: shared storage disabled, skipping PVC mounts for %s", username)
 
-    # 4. NSS wrapper — always runs; independently guarded so shared storage
+    # 5. NSS wrapper — always runs; independently guarded so shared storage
     #    failures never prevent whoami/id from showing the real username
     log.debug("pre-spawn: running NSS wrapper setup for %s", username)
     try:

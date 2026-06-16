@@ -454,6 +454,12 @@ jupyterhub:
     # specific value independent of the PVC/StorageClass setup.
     shared-storage-groups: []       # allowlist; empty = all groups from token
     shared-storage-mount-prefix: "/shared"
+    # Workspace storage — per-user RWO PVC for nebi workspaces.
+    # KubeSpawner creates these dynamically in the pre_spawn_hook.
+    # Leave empty to use the cluster default StorageClass.
+    workspace-storage-class: ""
+    # Pixi environments run 2–5 Gi each, so size accordingly.
+    workspace-storage-capacity: "20Gi"
     # Role-gated shared-mount RBAC configuration
     # is delivered via the hub Deployment's env vars (KC_REALM_API_URL
     # + KC_SHARED_MOUNT_ROLE), NOT via this `custom` block. Reasons:
