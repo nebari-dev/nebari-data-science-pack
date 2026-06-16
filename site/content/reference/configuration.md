@@ -37,7 +37,7 @@ Override `nebariapp.hostname` and `nebi.remoteURL` to break the convention.
 | `nebariapp` | NebariApp CRD: gateway routing and Keycloak OAuth. |
 | `singleuser` | User pod settings, including the network policy to the gateway. |
 | `singleuserCuller` | Idle culling for kernels, terminals, and servers inside user pods. |
-| `sharedStorage` | Per-group shared directories. See [Shared Storage](/docs/shared-storage/). |
+| `sharedStorage` | Per-group shared directories. See [Shared Storage](/guides/shared-storage/). |
 | `nebi` | Nebi companion service integration. |
 | `rbac` | Keycloak role and group bootstrap. |
 | `jupyterhub` | Passed straight through to the upstream JupyterHub chart. |

@@ -16,8 +16,8 @@ title = "Data Science Pack"
   favicon = "/nebari-symbol.svg"
 
   [[params.tabs]]
-    name = "Docs"
-    url = "/docs/"
+    name = "Guides"
+    url = "/guides/"
   [[params.tabs]]
     name = "Reference"
     url = "/reference/"

@@ -39,6 +39,6 @@ OAuth via Keycloak for production. See [Configuration](/reference/configuration/
 
 ## Next steps
 
-- [Installation](/docs/installation/) covers installing from source.
-- [Local Development](/docs/local-development/) sets up a live dev loop.
+- [Installation](/guides/installation/) covers installing from source.
+- [Local Development](/guides/local-development/) sets up a live dev loop.
 - [Configuration](/reference/configuration/) lists every value you can set.

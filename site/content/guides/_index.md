@@ -11,16 +11,16 @@ applications, and a dummy authenticator for local development (OAuth and Keycloa
 are configurable for production).
 
 {{< cards >}}
-{{< card title="Quickstart" href="/docs/quickstart/" >}}
+{{< card title="Quickstart" href="/guides/quickstart/" >}}
 Install the chart from the Helm repository and log in to JupyterHub.
 {{< /card >}}
-{{< card title="Installation" href="/docs/installation/" >}}
+{{< card title="Installation" href="/guides/installation/" >}}
 Install from the Helm repository or from source, then access the hub.
 {{< /card >}}
-{{< card title="Local Development" href="/docs/local-development/" >}}
+{{< card title="Local Development" href="/guides/local-development/" >}}
 Spin up a local k3d cluster with a Tilt dev loop in one command.
 {{< /card >}}
-{{< card title="Shared Storage" href="/docs/shared-storage/" >}}
+{{< card title="Shared Storage" href="/guides/shared-storage/" >}}
 Mount per-group shared directories into every user pod.
 {{< /card >}}
 {{< /cards >}}

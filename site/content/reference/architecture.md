@@ -40,4 +40,4 @@ managed from the hub UI.
 
 When shared storage is enabled, every user pod mounts per-group directories under
 `/shared/<group>`, backed by a ReadWriteMany volume. See
-[Shared Storage](/docs/shared-storage/) for the storage class requirements.
+[Shared Storage](/guides/shared-storage/) for the storage class requirements.
