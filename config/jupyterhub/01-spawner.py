@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import os
+import shlex
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -1001,6 +1002,47 @@ def _external_auth_provider_token(broker_url, provider, bearer_token):
         return json.loads(resp.read().decode("utf-8"))
 
 
+def _append_post_start_commands(spawner, commands):
+    """Append shell commands to the pod postStart hook."""
+    if not commands:
+        return
+
+    existing = dict(getattr(spawner, "lifecycle_hooks", None) or {})
+    post_start = existing.get("postStart", {})
+    command = post_start.get("exec", {}).get("command") if isinstance(post_start, dict) else None
+    new_script = " && ".join(commands)
+
+    if command and len(command) == 3 and command[:2] == ["/bin/sh", "-c"]:
+        new_script = f"{command[2]} && {new_script}"
+    elif command:
+        log.warning("postStart lifecycle hook has unsupported shape; replacing it")
+
+    spawner.lifecycle_hooks = {
+        **existing,
+        "postStart": {"exec": {"command": ["/bin/sh", "-c", new_script]}},
+    }
+
+
+def _configure_git_for_github_token(spawner):
+    """Teach git to use the injected GITHUB_TOKEN for normal GitHub HTTPS URLs."""
+    helper = (
+        '!f() { test "$1" = get || exit 0; '
+        'while IFS= read -r line; do test -z "$line" && break; done; '
+        'test -n "${GITHUB_TOKEN:-}" || exit 0; '
+        'printf "username=x-access-token\\npassword=%s\\n" "$GITHUB_TOKEN"; }; f'
+    )
+    _append_post_start_commands(
+        spawner,
+        [
+            "if command -v git >/dev/null 2>&1 && [ -n \"${GITHUB_TOKEN:-}\" ]; then "
+            "git config --global credential.https://github.com.username x-access-token && "
+            f"git config --global credential.https://github.com.helper {shlex.quote(helper)} && "
+            "git config --global url.https://github.com/.insteadOf git@github.com:; "
+            "fi",
+        ],
+    )
+
+
 async def _external_auth_pre_spawn_hook(spawner, auth_state):
     """Deliver external-auth provider tokens from configured contract fields."""
     if not external_auth_enabled or not external_auth_broker_url:
@@ -1034,6 +1076,7 @@ async def _external_auth_pre_spawn_hook(spawner, auth_state):
         spawner.environment = {**spawner.environment, env_var: token}
         if provider == "github":
             spawner.environment = {**spawner.environment, "GH_TOKEN": token}
+            _configure_git_for_github_token(spawner)
 
 
 # ---------------------------------------------------------------------------

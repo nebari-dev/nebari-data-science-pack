@@ -39,6 +39,7 @@ class _User:
 class _Spawner:
     def __init__(self, auth_state):
         self.environment = {}
+        self.lifecycle_hooks = None
         self.log = _Log()
         self.user = _User(auth_state)
 
@@ -95,6 +96,37 @@ def test_external_auth_injects_github_token_and_gh_token(monkeypatch):
     ]
     assert spawner.environment["GITHUB_TOKEN"] == "ghp_example"
     assert spawner.environment["GH_TOKEN"] == "ghp_example"
+    cmd = spawner.lifecycle_hooks["postStart"]["exec"]["command"]
+    assert cmd[:2] == ["/bin/sh", "-c"]
+    assert "credential.https://github.com.username x-access-token" in cmd[2]
+    assert "credential.https://github.com.helper" in cmd[2]
+    assert "GITHUB_TOKEN" in cmd[2]
+    assert "ghp_example" not in cmd[2]
+    assert "url.https://github.com/.insteadOf git@github.com:" in cmd[2]
+
+
+def test_external_auth_git_config_preserves_existing_poststart(monkeypatch):
+    mod = _load_spawner_module()
+    mod.external_auth_enabled = True
+    mod.external_auth_broker_url = "http://external-auth.nebari-system.svc.cluster.local"
+    mod.external_auth_providers = ["github"]
+    mod.external_auth_env_var_map = {"github": "GITHUB_TOKEN"}
+
+    monkeypatch.setattr(
+        mod,
+        "_external_auth_provider_token",
+        lambda *_args: {"status": "token_valid", "access_token": "ghp_example"},
+    )
+
+    spawner = _Spawner({"access_token": "keycloak-access-token"})
+    spawner.lifecycle_hooks = {
+        "postStart": {"exec": {"command": ["/bin/sh", "-c", "echo existing"]}},
+    }
+    asyncio.run(mod._external_auth_pre_spawn_hook(spawner, {"access_token": "keycloak-access-token"}))
+
+    cmd = spawner.lifecycle_hooks["postStart"]["exec"]["command"][2]
+    assert cmd.startswith("echo existing && ")
+    assert "credential.https://github.com.helper" in cmd
 
 
 def test_external_auth_skips_when_broker_has_no_valid_provider_token(monkeypatch):
