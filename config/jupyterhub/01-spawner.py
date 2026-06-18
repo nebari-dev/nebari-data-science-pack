@@ -11,6 +11,10 @@ from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+import escapism
+import string
+from kubernetes_asyncio.client.rest import ApiException
+from kubespawner.objects import make_pvc
 from z2jh import get_config
 
 log = logging.getLogger(__name__)
@@ -69,10 +73,26 @@ c.KubeSpawner.volume_mounts = [
 c.KubeSpawner.notebook_dir = "/home/jovyan"
 c.KubeSpawner.working_dir = "/home/jovyan"
 
-# Co-locate all pods for the same user on the same node.
+# affinity — co-locate all pods for the same user on the same node.
 # hcloud-volumes is ReadWriteOnce — only one node can mount it at a time.
 # Pod affinity ensures jhub-apps app pods land on the same node as the
 # user's JupyterLab pod so the shared home PVC can be mounted by all of them.
+#
+# securityContext.fsGroup: 100 — GID 100 (users group) as the pod's fsGroup.
+# Kubernetes adds GID 100 as a supplemental group and chgrps mounted volumes
+# to 100 at pod start. This ensures shared dirs (created by init container as
+# root:root) become root:100, writable by every member of the users group.
+#
+# securityContext.fsGroupChangePolicy: OnRootMismatch — the kubelet's default
+# recursive chown of every file on the home PVC to match fsGroup can take
+# 30-150s on PVCs with large pixi envs / model caches and time out the spawn.
+# OnRootMismatch only chowns when the root dir's GID is wrong, so the cost is
+# paid once and skipped on subsequent spawns.
+#
+# fsGroup is set here (not via c.KubeSpawner.fs_gid) because kubespawner's
+# extra_pod_config applies pod.spec attributes with a top-level overwrite —
+# any securityContext we set here REPLACES the one fs_gid would produce, so
+# both fields must live in this dict together.
 c.KubeSpawner.extra_pod_config = {
     "affinity": {
         "podAffinity": {
@@ -91,7 +111,11 @@ c.KubeSpawner.extra_pod_config = {
                 }
             ]
         }
-    }
+    },
+    "securityContext": {
+        "fsGroup": 100,
+        "fsGroupChangePolicy": "OnRootMismatch",
+    },
 }
 
 
@@ -101,7 +125,7 @@ c.KubeSpawner.extra_pod_config = {
 # When enabled, mount the shared-storage PVC so users can collaborate via
 # /shared/<group>. Group-specific subPaths and init containers are added
 # dynamically in _setup_shared_storage() at spawn time based on group membership.
-shared_storage_enabled = get_config("custom.shared-storage-enabled", False)
+shared_storage_enabled = get_chart_config("shared-storage-enabled", False)
 shared_storage_groups_allowlist = get_config("custom.shared-storage-groups", [])
 shared_storage_mount_prefix = get_config("custom.shared-storage-mount-prefix", "/shared")
 
@@ -111,23 +135,13 @@ if shared_storage_enabled:
         "persistentVolumeClaim": {"claimName": "shared-storage"},
     })
 
-# GID 100 (users group) as the fsGroup for all singleuser pods.
-# Kubernetes applies this as securityContext.fsGroup, which:
-#   1. Adds GID 100 as a supplemental group for the process
-#   2. chgrp -R 100 on all mounted volumes at pod start
-# This ensures shared dirs (created by init container as root:root) become
-# root:100, making them writable by users who have GID 100. Without this
-# being explicit, the behavior relies silently on the z2jh subchart default.
-c.KubeSpawner.fs_gid = 100
-
-
 # ---------------------------------------------------------------------------
 # Nebi binary (init container)
 # ---------------------------------------------------------------------------
 # Copy the nebi binary from the nebi server image into the JupyterLab pod
 # so the version matches what the deployment specifies, not what was baked
 # into the jupyterlab image at build time.
-nebi_image = get_config("custom.nebi-image", "")
+nebi_image = get_chart_config("nebi-image")
 if nebi_image:
     c.KubeSpawner.volumes.append({
         "name": "nebi-bin",
@@ -158,9 +172,11 @@ if nebi_image:
 env = dict(get_config("singleuser.extraEnv", {}))
 env["HOME"] = "/home/jovyan"
 
-nebi_remote_url = get_config("custom.nebi-remote-url", "")
+nebi_remote_url = get_chart_config("nebi-remote-url")
 if nebi_remote_url:
     env["NEBI_REMOTE_URL"] = nebi_remote_url
+
+env["NEBI_STORAGE_WORKSPACES_DIR"] = "/var/lib/nebi/workspaces"
 
 c.KubeSpawner.environment = env
 
@@ -175,9 +191,121 @@ c.KubeSpawner.environment = env
 # ``kubespawner_override`` accepts any valid KubeSpawner trait so deployers
 # can add node_selector, image, extra_resource_limits (GPU), etc. without
 # code changes. Empty list = no profile selector (single-instance mode).
+# Keys used only for group gating; KubeSpawner must never see them.
+_PROFILE_GATING_KEYS = ("access", "groups", "users")
+
+
+def _get_profile_groups(auth_state):
+    """Resolve the user's full Keycloak group list for profile gating.
+
+    Unlike _get_user_groups (shared-storage), this uses the user's COMPLETE
+    group list — not the mount-role gated subset and not the shared-storage
+    allowlist — so profile visibility does not depend on shared-storage RBAC
+    being deployed. Group names are normalised to the leaf segment
+    (/projects/foo -> foo) and deduplicated, matching classic Nebari.
+    """
+    if not auth_state:
+        return []
+    raw_groups = auth_state.get("groups")
+    if raw_groups is None:
+        raw_groups = (auth_state.get("oauth_user") or {}).get("groups", [])
+
+    seen = set()
+    result = []
+    for g in raw_groups or []:
+        name = Path(g).name
+        if name and name not in seen:
+            seen.add(name)
+            result.append(name)
+    return result
+
+
+def _get_keycloak_profile_slugs(auth_state):
+    """Profile slugs allowed via ``access: keycloak``.
+
+    Read from ``auth_state["allowed_jupyterlab_profiles"]``, which the
+    authenticator resolves at login from the user's ``jupyterlab-profiles``
+    Keycloak role (its ``profiles`` attribute) on the hub client.
+    """
+    return (auth_state or {}).get("allowed_jupyterlab_profiles", []) or []
+
+
+def _profile_username(auth_state):
+    """Username matched against a profile's ``users`` list.
+
+    Uses the Keycloak ``preferred_username`` (mirrors classic Nebari) so it
+    resolves identically in the spawner and in jhub-apps' fake-spawner path,
+    where ``spawner.user.name`` is a Mock rather than a real username.
+    """
+    oauth_user = (auth_state or {}).get("oauth_user") or {}
+    return oauth_user.get("preferred_username") or ""
+
+
+def _filter_profiles(profiles, groups, username, keycloak_profile_slugs=()):
+    """Return the profiles a user may select, stripped of gating-only keys.
+
+    Mirrors classic Nebari's ``access:`` semantics on each profile:
+      * ``access: all`` (or omitted) — visible to everyone.
+      * ``access: yaml`` — visible only if the user is in the profile's
+        ``users`` list or shares one of the profile's ``groups``.
+      * ``access: keycloak``: visible only if the profile's ``slug`` is in
+        the allow-list granted by the user's ``jupyterlab-profiles`` Keycloak
+        role (its ``profiles`` attribute), resolved at login by the
+        authenticator and stamped into auth_state.
+    """
+    group_set = set(groups)
+    profile_slug_set = set(keycloak_profile_slugs)
+    visible = []
+    for profile in profiles:
+        access = profile.get("access", "all")
+        if access == "yaml":
+            in_users = username in set(profile.get("users") or [])
+            in_groups = bool(group_set & set(profile.get("groups") or []))
+            if not in_users and not in_groups:
+                continue
+        elif access == "keycloak":
+            if profile.get("slug") not in profile_slug_set:
+                continue
+        elif access != "all":
+            # Fail closed on an unrecognized access mode: restricted profiles
+            # gate expensive resources, so a typo must hide the profile rather
+            # than expose it to everyone.
+            log.warning(
+                "profiles: hiding %r — unsupported access mode %r "
+                "(use 'all', 'yaml', or 'keycloak')",
+                profile.get("slug") or profile.get("display_name"),
+                access,
+            )
+            continue
+        clean = {k: v for k, v in profile.items() if k not in _PROFILE_GATING_KEYS}
+        visible.append(clean)
+    return visible
+
+
+async def _render_profile_list(spawner):
+    """Per-user profile_list callable — filters profiles by group membership.
+
+    KubeSpawner (and jhub-apps' server-types endpoint) accept an async callable
+    here and invoke it with the spawner at selection time. We resolve the
+    user's Keycloak groups from auth_state and return only the profiles they
+    are allowed to see, with gating-only keys stripped.
+    """
+    auth_state = await spawner.user.get_auth_state()
+    groups = _get_profile_groups(auth_state)
+    username = _profile_username(auth_state)
+    keycloak_profile_slugs = _get_keycloak_profile_slugs(auth_state)
+    visible = _filter_profiles(_profiles, groups, username, keycloak_profile_slugs)
+    log.info(
+        "profiles: user %s (groups=%s) sees %d/%d profile(s): %s",
+        username, groups, len(visible), len(_profiles),
+        [p.get("slug") or p.get("display_name") for p in visible],
+    )
+    return visible
+
+
 _profiles = get_config("custom.profiles", [])
 if _profiles:
-    c.KubeSpawner.profile_list = _profiles
+    c.KubeSpawner.profile_list = _render_profile_list
     log.info(
         "profiles: loaded %d profile(s): %s",
         len(_profiles),
@@ -446,11 +574,11 @@ async def _nebi_pre_spawn_hook(spawner):
         log.warning("No auth_state for %s, skipping Nebi auto-auth", spawner.user.name)
         return
 
-    keycloak_url = get_config("custom.keycloak-token-url", "")
-    nebi_cid = get_config("custom.nebi-client-id", "")
-    hub_cid = get_config("custom.jupyterhub-client-id", "")
+    keycloak_url = get_chart_config("keycloak-token-url")
+    nebi_cid = get_chart_config("nebi-client-id")
+    hub_cid = get_chart_config("jupyterhub-client-id")
     hub_secret = os.environ.get("JUPYTERHUB_OIDC_CLIENT_SECRET", "")
-    nebi_url = get_config("custom.nebi-internal-url", "")
+    nebi_url = get_chart_config("nebi-internal-url")
 
     if not all([keycloak_url, nebi_cid, hub_cid, hub_secret, nebi_url]):
         log.warning("Nebi auto-auth not fully configured, skipping")
@@ -485,7 +613,7 @@ async def _nebi_pre_spawn_hook(spawner):
         conda_env = getattr(spawner, "user_options", {}).get("conda_env", "")
         if conda_env:
             workspace_name = conda_env.rsplit("/", 1)[-1] if "/" in conda_env else conda_env
-            nebi_remote = get_config("custom.nebi-remote-url", "")
+            nebi_remote = get_chart_config("nebi-remote-url")
             nebi_env_dir = "/tmp/nebi-env"
             ws_dir = f"{nebi_env_dir}/workspace"
             log.info(
@@ -779,13 +907,67 @@ async def _setup_nss_wrapper(spawner, username, groups):
 
 
 # ---------------------------------------------------------------------------
+# Workspace PVC helper
+# ---------------------------------------------------------------------------
+
+async def _ensure_workspace_pvc(spawner):
+    """Create a per-user RWO PVC for nebi workspaces if it doesn't exist.
+
+    KubeSpawner only manages one PVC natively (the home directory).  We
+    create the second PVC here via the Kubernetes API, mirroring the same
+    retry logic KubeSpawner uses internally.
+    """
+    username = spawner.user.name
+    safe_chars = set(string.ascii_lowercase + string.digits)
+    slug = escapism.escape(username, safe=safe_chars, escape_char='-').lower()
+    pvc_name = f"nebi-workspaces-{slug}"
+    namespace = spawner.namespace
+
+    storage_class = get_config("custom.workspace-storage-class", "") or None
+    storage_capacity = get_config("custom.workspace-storage-capacity", "20Gi")
+
+    pvc = make_pvc(
+        name=pvc_name,
+        storage_class=storage_class,
+        access_modes=["ReadWriteOnce"],
+        selector=None,
+        storage=storage_capacity,
+        labels={
+            "app": "nebi-workspaces",
+            "hub.jupyter.org/username": slug,
+        },
+    )
+
+    try:
+        await spawner.api.create_namespaced_persistent_volume_claim(
+            namespace=namespace,
+            body=pvc,
+        )
+        log.info("Created workspace PVC %s in namespace %s", pvc_name, namespace)
+    except ApiException as exc:
+        if exc.status == 409:
+            log.info("Workspace PVC %s already  exists", pvc_name)
+        else:
+            log.error("Failed to create workspace PVC %s: %s", pvc_name, exc)
+            raise
+
+    return pvc_name
+
+
+# ---------------------------------------------------------------------------
 # Pre-spawn hook orchestrator
 # ---------------------------------------------------------------------------
-# Chains the three independent concerns: Nebi auto-auth, shared storage mounts,
-# and NSS wrapper setup. Each is implemented as its own focused function above.
-# The orchestrator always runs so NSS wrapper is active even without Nebi/shared.
+# Chains the independent concerns: 
+# 1. Nebi auto-auth
+# 2. workspace PVC
+# 3. Resolve groups
+# 5. shared storage mounts
+# 4. NSS wrapper setup
+# 
+# Each is implemented as its own focused function above. The orchestrator always
+# runs so NSS wrapper is active even without Nebi/shared.
 
-_nebi_auth_configured = bool(nebi_remote_url and get_config("custom.nebi-internal-url", ""))
+_nebi_auth_configured = bool(nebi_remote_url and get_chart_config("nebi-internal-url"))
 log.info(
     "pre-spawn: Nebi auth configured=%s, shared storage enabled=%s, mount prefix=%s",
     _nebi_auth_configured, shared_storage_enabled, shared_storage_mount_prefix,
@@ -817,11 +999,32 @@ async def _pre_spawn_hook(spawner):
     else:
         log.debug("pre-spawn: Nebi auto-auth not configured, skipping")
 
-    # 2. Resolve groups from auth_state (stored by KeyCloakOAuthenticator)
+    # 2. Workspace PVC — per-user RWO (non-fatal)
+    log.debug("pre-spawn: ensuring workspace PVC for %s", username)
+    try:
+        workspace_pvc_name = await _ensure_workspace_pvc(spawner)
+        workspaces_volume = {
+            "name": "nebi-workspaces",
+            "persistentVolumeClaim": {"claimName": workspace_pvc_name},
+        }
+        workspaces_volume_mount = {
+            "name": "nebi-workspaces",
+            "mountPath": "/var/lib/nebi/workspaces",
+        }
+        log.info("pre-spawn: workspace PVC %s configured for %s", workspace_pvc_name, username)
+    except Exception:
+        log.exception("pre-spawn: workspace PVC setup FAILED for %s", username)
+        workspaces_volume = workspaces_volume_mount = None
+    if workspaces_volume is not None:
+        spawner.volumes.append(workspaces_volume)
+    if workspaces_volume_mount is not None:
+        spawner.volume_mounts.append(workspaces_volume_mount)
+
+    # 3. Resolve groups from auth_state (stored by KeyCloakOAuthenticator)
     groups = _get_user_groups(auth_state)
     log.info("pre-spawn: user %s resolved groups: %s", username, groups)
 
-    # 3. Shared group directory PVC mounts (only when RWX PVC is configured)
+    # 4. Shared group directory PVC mounts (only when RWX PVC is configured)
     if shared_storage_enabled:
         if groups:
             log.info("pre-spawn: setting up shared storage mounts for %s", username)
@@ -841,7 +1044,7 @@ async def _pre_spawn_hook(spawner):
     else:
         log.debug("pre-spawn: shared storage disabled, skipping PVC mounts for %s", username)
 
-    # 4. NSS wrapper — always runs; independently guarded so shared storage
+    # 5. NSS wrapper — always runs; independently guarded so shared storage
     #    failures never prevent whoami/id from showing the real username
     log.debug("pre-spawn: running NSS wrapper setup for %s", username)
     try:
