@@ -53,10 +53,13 @@ nebariapp:
     # JupyterHub proxy service (created by jupyterhub subchart)
     name: proxy-public
     port: 80
-  # routing:
-  #   routes:
-  #     - pathPrefix: /
-  #       pathType: Exact
+  # Gateway routing. Defaults to sending all paths to the JupyterHub proxy so
+  # the operator creates the HTTPRoute (and, with it, the TLS listener/cert)
+  # out of the box. Without this the NebariApp reports RoutingNotConfigured and
+  # the hub is never exposed.
+  routing:
+    routes:
+      - pathPrefix: /
   auth:
     enabled: true
     provider: keycloak
@@ -90,7 +93,11 @@ nebariapp:
     # description: supplementary text shown on the service card (max 256 chars).
     description: "Interactive Python notebooks for data science"
     # icon: built-in icon ID (e.g. jupyter, grafana) or a URL to a custom image.
-    icon: "https://jupyter.org/assets/homepage/main-logo.svg"
+    # Using a local SVG with prefers-color-scheme support instead of the upstream
+    # jupyter.org logo which has dark gray elements invisible in dark mode.
+    icon: "https://raw.githubusercontent.com/nebari-dev/nebari-data-science-pack/main/assets/icons/jupyter-icon-light.svg"
+    iconLight: "https://raw.githubusercontent.com/nebari-dev/nebari-data-science-pack/main/assets/icons/jupyter-icon-light.svg"
+    iconDark: "https://raw.githubusercontent.com/nebari-dev/nebari-data-science-pack/main/assets/icons/jupyter-icon-dark.svg"
     # category: groups related services together on the landing page.
     category: "Data Science"
     # priority: sort order within a category; lower numbers appear first (0–1000).
@@ -221,7 +228,7 @@ nebi:
     # Pinned per chart release by CI (scripts/bump_image_tags.py); deployers
     # can override to test a PR build or roll forward. Leave non-empty so
     # the init container is wired by default.
-    tag: "sha-f024a78"
+    tag: "sha-be3187c"
     pullPolicy: IfNotPresent
   # External Nebi FQDN (browser-side, used for OIDC redirect).
   # If empty, derived from keycloak.hostname as
@@ -334,6 +341,10 @@ jupyterhub:
     # If empty, derived as `<nebi.image.repository>:<nebi.image.tag>`.
     nebi-image: ""
     nebi-image-pull-policy: "IfNotPresent"
+    # jhub-app-proxy version installed at app-spawn time. Must be >= v0.2.3 for
+    # apps to run inside a Nebi (pixi) environment; older versions only support
+    # conda activation and fall back to the base env (missing packages).
+    jhub-app-proxy-version: "v0.2.3"
     # External Nebi URL. If empty, derived from nebi.remoteURL (which
     # itself defaults from keycloak.hostname + subdomains.nebi).
     nebi-remote-url: ""
@@ -375,6 +386,34 @@ jupyterhub:
     # kubespawner_override accepts any valid KubeSpawner trait (cpu_limit,
     # mem_limit, node_selector, image, extra_resource_limits, etc.) so deployers
     # can add GPU profiles, custom images, etc. without code changes.
+    #
+    # Per-profile group gating (parity with classic Nebari). Each entry may
+    # declare an ``access`` mode that controls who sees it in the selector:
+    #   access: all       (or omitted) profile is visible to every user.
+    #   access: yaml      profile is visible only to users whose Keycloak
+    #                     groups intersect ``groups``, or whose
+    #                     preferred_username is in ``users``. A user in none of
+    #                     these never sees it.
+    #   access: keycloak  profile is visible only when its ``slug`` is in the
+    #                     allow-list granted by the user's ``jupyterlab-profiles``
+    #                     Keycloak role. The deployer creates that client role on
+    #                     the hub client, puts the allowed slugs in its
+    #                     ``profiles`` attribute (and ``component=jupyterhub-profiles``),
+    #                     and assigns the role to users or groups. The hub reads
+    #                     it via the KC Admin API at login, so the allow-list
+    #                     lives in Keycloak rather than in this file.
+    # Any other access value fails closed (the profile is hidden) so a typo
+    # cannot expose an expensive GPU/large-instance profile to everyone.
+    # The ``access``/``groups``/``users`` keys are gating-only and are stripped
+    # before the profile reaches KubeSpawner. Groups come from the same
+    # Keycloak group claim used by shared storage. Example:
+    #   - display_name: "G4 GPU Instance"
+    #     access: yaml
+    #     groups:
+    #       - gpu-access
+    #     kubespawner_override:
+    #       extra_resource_limits:
+    #         nvidia.com/gpu: 1
     # NOTE: when bumping singleuser.image.tag below, also bump the
     # ``image: ...`` lines inside each profile_options.image.choices.default
     # entry so the profile selector shows the right tag. (z2jh values.yaml
@@ -390,7 +429,7 @@ jupyterhub:
           # The same value sits inside profile_options.image.choices.default
           # so the JupyterLab profile selector keeps showing it too.
           # scripts/bump_image_tags.py syncs all three on every bump.
-          image: quay.io/nebari/nebari-data-science-pack-jupyterlab:sha-7788c40
+          image: quay.io/nebari/nebari-data-science-pack-jupyterlab:sha-46289ab
           cpu_limit: 1
           cpu_guarantee: 0.5
           mem_limit: "2G"
@@ -400,15 +439,15 @@ jupyterhub:
             display_name: Image
             choices:
               default:
-                display_name: "nebari-data-science-pack-jupyterlab:sha-7788c40"
+                display_name: "nebari-data-science-pack-jupyterlab:sha-46289ab"
                 default: true
                 kubespawner_override:
-                  image: quay.io/nebari/nebari-data-science-pack-jupyterlab:sha-7788c40
+                  image: quay.io/nebari/nebari-data-science-pack-jupyterlab:sha-46289ab
       - slug: medium-instance
         display_name: "Medium Instance"
         description: "4 CPU / 8 GB RAM — pandas / scikit-learn workloads on medium datasets."
         kubespawner_override:
-          image: quay.io/nebari/nebari-data-science-pack-jupyterlab:sha-7788c40
+          image: quay.io/nebari/nebari-data-science-pack-jupyterlab:sha-46289ab
           cpu_limit: 4
           cpu_guarantee: 2
           mem_limit: "8G"
@@ -418,10 +457,10 @@ jupyterhub:
             display_name: Image
             choices:
               default:
-                display_name: "nebari-data-science-pack-jupyterlab:sha-7788c40"
+                display_name: "nebari-data-science-pack-jupyterlab:sha-46289ab"
                 default: true
                 kubespawner_override:
-                  image: quay.io/nebari/nebari-data-science-pack-jupyterlab:sha-7788c40
+                  image: quay.io/nebari/nebari-data-science-pack-jupyterlab:sha-46289ab
     # Terminal customization: controls Starship prompt in JupyterLab terminals.
     # When false, falls back to the default bash prompt.
     terminal-customization: true
@@ -431,6 +470,12 @@ jupyterhub:
     # specific value independent of the PVC/StorageClass setup.
     shared-storage-groups: []       # allowlist; empty = all groups from token
     shared-storage-mount-prefix: "/shared"
+    # Workspace storage — per-user RWO PVC for nebi workspaces.
+    # KubeSpawner creates these dynamically in the pre_spawn_hook.
+    # Leave empty to use the cluster default StorageClass.
+    workspace-storage-class: ""
+    # Pixi environments run 2–5 Gi each, so size accordingly.
+    workspace-storage-capacity: "20Gi"
     # Role-gated shared-mount RBAC configuration
     # is delivered via the hub Deployment's env vars (KC_REALM_API_URL
     # + KC_SHARED_MOUNT_ROLE), NOT via this `custom` block. Reasons:
@@ -477,7 +522,7 @@ jupyterhub:
     # class clears current_user — id_token_hint now reaches KC).
     image:
       name: quay.io/nebari/nebari-data-science-pack-jupyterhub
-      tag: "sha-7788c40"
+      tag: "sha-46289ab"
 
     config:
       JupyterHub:
@@ -567,7 +612,7 @@ jupyterhub:
   singleuser:
     image:
       name: quay.io/nebari/nebari-data-science-pack-jupyterlab
-      tag: "sha-7788c40"
+      tag: "sha-46289ab"
     defaultUrl: "/lab"
     extraEnv:
       JUPYTERHUB_SINGLEUSER_APP: "jupyter_server.serverapp.ServerApp"
