@@ -105,6 +105,51 @@ def test_external_auth_injects_github_token_and_gh_token(monkeypatch):
     assert "url.https://github.com/.insteadOf git@github.com:" in cmd[2]
 
 
+def test_git_identity_uses_auth_email_and_preserves_existing_config():
+    mod = _load_spawner_module()
+    spawner = _Spawner({"access_token": "keycloak-access-token"})
+    spawner.environment = {
+        "PREFERRED_USERNAME": "Alice Example",
+        "PREFERRED_EMAIL": "alice@example.test",
+    }
+
+    mod._configure_git_user_identity(spawner)
+
+    cmd = spawner.lifecycle_hooks["postStart"]["exec"]["command"]
+    assert cmd[:2] == ["/bin/sh", "-c"]
+    assert "git config --global --get user.name" in cmd[2]
+    assert "git config --global user.name \"$PREFERRED_USERNAME\"" in cmd[2]
+    assert "git config --global --get user.email" in cmd[2]
+    assert "git config --global user.email \"$PREFERRED_EMAIL\"" in cmd[2]
+    assert "Alice Example" not in cmd[2]
+    assert "alice@example.test" not in cmd[2]
+
+
+def test_git_identity_appends_to_existing_poststart():
+    mod = _load_spawner_module()
+    spawner = _Spawner({"access_token": "keycloak-access-token"})
+    spawner.environment = {
+        "PREFERRED_USERNAME": "Alice Example",
+        "PREFERRED_EMAIL": "alice@example.test",
+    }
+    spawner.lifecycle_hooks = {
+        "postStart": {"exec": {"command": ["/bin/sh", "-c", "echo nss-wrapper"]}},
+    }
+
+    mod._configure_git_user_identity(spawner)
+
+    cmd = spawner.lifecycle_hooks["postStart"]["exec"]["command"][2]
+    assert cmd.startswith("echo nss-wrapper && ")
+    assert "git config --global user.name \"$PREFERRED_USERNAME\"" in cmd
+
+
+def test_git_identity_email_falls_back_to_email_username():
+    mod = _load_spawner_module()
+
+    assert mod._preferred_git_email({}, "alice@example.test") == "alice@example.test"
+    assert mod._preferred_git_email({}, "alice") == ""
+
+
 def test_external_auth_git_config_preserves_existing_poststart(monkeypatch):
     mod = _load_spawner_module()
     mod.external_auth_enabled = True

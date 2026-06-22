@@ -1023,6 +1023,34 @@ def _append_post_start_commands(spawner, commands):
     }
 
 
+def _preferred_git_email(oauth_user, username):
+    """Return a usable Git author email from auth claims or username fallback."""
+    email = str((oauth_user or {}).get("email") or "").strip()
+    if email:
+        return email
+    username = str(username or "").strip()
+    if "@" in username:
+        return username
+    return ""
+
+
+def _configure_git_user_identity(spawner):
+    """Set default Git author identity without overwriting user config."""
+    _append_post_start_commands(
+        spawner,
+        [
+            "if command -v git >/dev/null 2>&1; then "
+            "if [ -n \"${PREFERRED_USERNAME:-}\" ] && "
+            "! git config --global --get user.name >/dev/null 2>&1; then "
+            "git config --global user.name \"$PREFERRED_USERNAME\"; fi; "
+            "if [ -n \"${PREFERRED_EMAIL:-}\" ] && "
+            "! git config --global --get user.email >/dev/null 2>&1; then "
+            "git config --global user.email \"$PREFERRED_EMAIL\"; fi; "
+            "fi",
+        ],
+    )
+
+
 def _configure_git_for_github_token(spawner):
     """Teach git to use the injected GITHUB_TOKEN for normal GitHub HTTPS URLs."""
     helper = (
@@ -1115,7 +1143,12 @@ async def _pre_spawn_hook(spawner):
     # downstream tooling read this env var.
     oauth_user = (auth_state or {}).get("oauth_user") or {}
     preferred_username = oauth_user.get("preferred_username") or username
-    spawner.environment = {**spawner.environment, "PREFERRED_USERNAME": preferred_username}
+    preferred_email = _preferred_git_email(oauth_user, username)
+    spawner.environment = {
+        **spawner.environment,
+        "PREFERRED_USERNAME": preferred_username,
+        "PREFERRED_EMAIL": preferred_email,
+    }
 
     # 1. Nebi auto-auth (non-fatal)
     if _nebi_auth_configured:
@@ -1178,7 +1211,10 @@ async def _pre_spawn_hook(spawner):
     except Exception:
         log.exception("pre-spawn: NSS wrapper setup FAILED for %s", username)
 
-    # 6. Optional external auth provider tokens (disabled unless configured)
+    # 6. Git commit identity for VSCode/JupyterLab authoring (non-fatal)
+    _configure_git_user_identity(spawner)
+
+    # 7. Optional external auth provider tokens (disabled unless configured)
     try:
         await _external_auth_pre_spawn_hook(spawner, auth_state)
     except Exception:
