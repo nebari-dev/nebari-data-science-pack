@@ -33,9 +33,11 @@ EXPECTED_DIR_MODE = 0o2775    # umask 0002 + setgid propagated from parent
 def _write_under_pod_umask(user, shell_cmd):
     """Run `shell_cmd` with umask taken from NB_UMASK.
 
-    `kubectl exec` starts a fresh shell that does NOT inherit the umask
-    z2jh's start.sh applied to the kernel process — so tests have to
-    re-apply it explicitly to observe the documented behavior.
+    A `kubectl exec` shell is not a child of the jupyterhub-singleuser
+    server process, so it does NOT inherit the server's umask — tests have
+    to re-apply it explicitly here to observe the file-mode behavior. That
+    the *server* (and thus kernels/terminals) actually runs with umask 0002
+    is verified separately by test_singleuser_server_runs_with_umask_0002.
     """
     rc, out = user.exec("bash", "-c", f'umask "$NB_UMASK"; {shell_cmd}')
     assert rc == 0, f"setup command failed (rc={rc}): {out}"
@@ -69,13 +71,29 @@ def test_pod_is_member_of_users_group(spawn_user):
 
 
 def test_pod_environment_sets_nb_umask_to_0002(spawn_user):
-    """NB_UMASK=0002 is the env var z2jh's start.sh applies before exec'ing
-    the kernel. The umask effect is covered by the file-mode test below;
-    here we just pin the configuration contract."""
+    """NB_UMASK=0002 is set in the pod env by the spawner. This image is not
+    docker-stacks, so the value is consumed by the c.KubeSpawner.cmd wrapper
+    (umask before exec), not a start.sh. Here we just pin the configuration
+    contract; the runtime effect is checked by the test below."""
     u = spawn_user("alice-data")
     rc, out = u.exec("printenv", "NB_UMASK")
     assert rc == 0
     assert out == "0002"
+
+
+def test_singleuser_server_runs_with_umask_0002(spawn_user):
+    """The jupyterhub-singleuser server process must actually run with umask
+    0002 — this is what kernels and terminals inherit. We read the live Umask
+    from /proc/<pid>/status, which cannot be faked by a re-applied exec shell
+    (the exec shell is not a child of the server). Regression guard for #144:
+    NB_UMASK was set in the env but never consumed, so the kernel ran 0022."""
+    u = spawn_user("alice-data")
+    rc, out = u.exec(
+        "sh", "-c",
+        "grep -i Umask /proc/$(pgrep -f jupyterhub-singleuser | head -1)/status",
+    )
+    assert rc == 0, f"could not read server umask: {out}"
+    assert "0002" in out, f"server umask is not 0002: {out!r}"
 
 
 # --- File/dir creation inherits group + umask ------------------------------
