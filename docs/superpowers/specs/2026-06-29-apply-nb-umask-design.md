@@ -45,36 +45,44 @@ issue describes.
 
 ## Fix
 
-`images/nebi/jupyter_server_config.py` is currently empty but is already copied
-to `/usr/local/etc/jupyter/jupyter_server_config.py` (Dockerfile:173) and loaded
-by every `jupyterhub-singleuser` server. Set the umask there:
+Wrap the singleuser server command in `config/jupyterhub/01-spawner.py` so
+`umask` runs before the server is exec'd:
 
 ```python
-import os
-
-# NB_UMASK is placed in the pod env by the spawner (config/jupyterhub/01-spawner.py).
-# This image is NOT jupyter docker-stacks, so there is no start.sh to consume it.
-# Set the umask in the server process here: kernels and terminals are children of
-# this process and inherit it. See:
-# https://github.com/nebari-dev/data-science-pack/issues/144
-_nb_umask = os.environ.get("NB_UMASK", "0002")
-try:
-    os.umask(int(_nb_umask, 8))
-except (TypeError, ValueError):
-    os.umask(0o002)
+c.KubeSpawner.cmd = [
+    "sh",
+    "-c",
+    'umask "${NB_UMASK:-0002}"; exec "$0" "$@"',
+    "jupyterhub-singleuser",
+]
 ```
 
-The server config is evaluated in the server's main process before it spawns any
-kernel or terminal, so a single `os.umask` call covers both paths. No spawner,
-values, or Dockerfile changes are required.
+KubeSpawner appends its computed args after `command` in the pod spec, so the
+final argv is `sh -c '<script>' jupyterhub-singleuser <args...>`: inside the
+script `$0` is `jupyterhub-singleuser` and `$@` is the args, and `exec "$0" "$@"`
+replaces the shell with the real server — now carrying umask `0002`. Kernels and
+terminals are children of the server and inherit it.
 
-### Why not the alternatives
+Bound to `c.KubeSpawner.cmd` (not `c.Spawner.cmd`) so it wins on trait precedence
+regardless of config load order, and to match this file's convention.
 
-- **`start.sh` wrapper + `spawner.cmd`:** faithful to docker-stacks semantics but
-  adds a script and a spawner-cmd indirection to maintain. Rejected.
-- **`/etc/profile.d` umask:** only covers login-shell terminals, not the kernel,
-  and terminals already inherit from the server once the server umask is fixed.
-  Redundant. Rejected.
+### Why this approach (vs. the image)
+
+This is configured **hub-side** (rendered into the hub ConfigMap), so it takes
+effect on the next spawn with **no singleuser image rebuild and no `values.yaml`
+image-tag bump**. CI's e2e suite pulls the *published* singleuser image named in
+`values.yaml` (`docker pull` in `test.yaml`), so a fix baked into the image would
+leave the new regression test red until a new image is built and the tag bumped
+(the repo's two-step `chore: bump image tags` flow). The hub-side wrapper makes
+the test pass against the existing image.
+
+### Rejected alternatives
+
+- **`os.umask` in the image's `jupyter_server_config.py`:** cleaner home for the
+  setting, but requires an image rebuild + tag bump before the e2e test can pass.
+  Rejected for the shippability reason above.
+- **`/etc/profile.d` umask:** only covers login-shell terminals, not the kernel;
+  redundant once the server umask is fixed. Rejected.
 
 ## Tests
 
@@ -107,17 +115,17 @@ these images — direct proof with no re-application.
 
 ## Comment / documentation cleanup
 
-- `config/jupyterhub/01-spawner.py:797` — the docstring says the function "Sets
-  ... `NB_UMASK=0002`." Add a note that the value is consumed by the image's
-  `jupyter_server_config.py`, not by a non-existent `start.sh`.
+- `config/jupyterhub/01-spawner.py` — the `_setup_nss_wrapper` docstring says it
+  "Sets ... `NB_UMASK=0002`." Note that the value is consumed by the
+  `c.KubeSpawner.cmd` wrapper, not by a non-existent `start.sh`.
 - `tests/e2e/test_shared_storage.py` — correct the two comments
   (`_write_under_pod_umask` docstring and `test_pod_environment_sets_nb_umask_to_0002`)
   that attribute the umask application to "z2jh's start.sh."
 
 ## Out of scope
 
-- No change to `01-spawner.py` behavior (the env var stays).
-- No `start.sh` wrapper, no Helm value changes.
+- No singleuser image change (so no rebuild / tag bump).
+- No Helm value changes; the `NB_UMASK` env var stays as-is.
 - Per-user UIDs are a separate, larger discussion (noted on the issue, not
   addressed here).
 

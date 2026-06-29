@@ -73,6 +73,23 @@ c.KubeSpawner.volume_mounts = [
 c.KubeSpawner.notebook_dir = "/home/jovyan"
 c.KubeSpawner.working_dir = "/home/jovyan"
 
+# Apply NB_UMASK to the singleuser server process. NB_UMASK=0002 is set in the
+# pod env (see _setup_nss_wrapper) so files in /shared/<group> are group-writable
+# (664/2775). But this image is NOT jupyter docker-stacks — there is no start.sh
+# to consume NB_UMASK, and the k8s `command:` overrides any Dockerfile ENTRYPOINT.
+# So we wrap the server command here: `umask` runs before `exec`, and the kernel
+# and terminal processes (children of the server) inherit it. Done hub-side rather
+# than in the image so it takes effect without an image rebuild / tag bump.
+# `$0` is the real command (jupyterhub-singleuser); `$@` is KubeSpawner's args,
+# appended by k8s after `command`. See
+# https://github.com/nebari-dev/data-science-pack/issues/144
+c.KubeSpawner.cmd = [
+    "sh",
+    "-c",
+    'umask "${NB_UMASK:-0002}"; exec "$0" "$@"',
+    "jupyterhub-singleuser",
+]
+
 # affinity — co-locate all pods for the same user on the same node.
 # hcloud-volumes is ReadWriteOnce — only one node can mount it at a time.
 # Pod affinity ensures jhub-apps app pods land on the same node as the
@@ -881,7 +898,10 @@ def _generate_nss_files(username, uid=1000, gid=1000):
 async def _setup_nss_wrapper(spawner, username, groups):
     """Configure libnss_wrapper so whoami/id report the real username.
 
-    Sets LD_PRELOAD, NSS_WRAPPER_* paths, and NB_UMASK=0002.
+    Sets LD_PRELOAD, NSS_WRAPPER_* paths, and NB_UMASK=0002. NB_UMASK is
+    consumed by the c.KubeSpawner.cmd wrapper above (umask before exec), NOT
+    by a docker-stacks start.sh — this image has none. See
+    https://github.com/nebari-dev/data-science-pack/issues/144
     Adds a postStart lifecycle hook that:
     - writes /tmp/passwd and /tmp/group using printf (safe for special chars in username)
     - when shared PVC is enabled: symlinks ~/shared → PVC mount prefix
